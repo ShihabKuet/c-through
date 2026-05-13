@@ -2,13 +2,30 @@
   "name": "c-through",
   "displayName": "C Through",
   "description": "Source Insight-style relational function call tree and reference visualizer for C/C++ code",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "devtools",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/local/c-through" },
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Other", "Visualization"],
-  "keywords": ["C", "C++", "function", "call tree", "relational", "source insight", "reference", "c through"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/local/c-through"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "C",
+    "C++",
+    "function",
+    "call tree",
+    "relational",
+    "source insight",
+    "reference",
+    "c through"
+  ],
   "activationEvents": [
     "onLanguage:c",
     "onLanguage:cpp",
@@ -21,13 +38,46 @@
   "main": "./src/extension.js",
   "contributes": {
     "commands": [
-      { "command": "cThrough.showTree",          "title": "C Through: Show Relational Tree",           "icon": "$(type-hierarchy)" },
-      { "command": "cThrough.showCallees",        "title": "C Through: Show Functions Called By This",  "icon": "$(arrow-down)" },
-      { "command": "cThrough.showCallers",        "title": "C Through: Show Functions Calling This",    "icon": "$(arrow-up)" },
-      { "command": "cThrough.analyzeFile",        "title": "C Through: Analyze Current File",           "icon": "$(file-code)" },
-      { "command": "cThrough.analyzeWorkspace",   "title": "C Through: Analyze Entire Workspace",       "icon": "$(search)" },
-      { "command": "cThrough.analyzeDirectory",   "title": "C Through: Analyze This Directory",         "icon": "$(folder-opened)" },
-      { "command": "cThrough.rescan",             "title": "C Through: Re-scan Last Scope",             "icon": "$(refresh)" }
+      {
+        "command": "cThrough.showTree",
+        "title": "C Through: Show Relational Tree",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "cThrough.showCallees",
+        "title": "C Through: Show Functions Called By This",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "cThrough.showCallers",
+        "title": "C Through: Show Functions Calling This",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "cThrough.analyzeFile",
+        "title": "C Through: Analyze Current File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "cThrough.analyzeWorkspace",
+        "title": "C Through: Analyze Entire Workspace",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cThrough.analyzeDirectory",
+        "title": "C Through: Analyze This Directory",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "cThrough.rescan",
+        "title": "C Through: Re-scan Last Scope",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cThrough.toggleCodeLens",
+        "title": "C Through: Toggle CodeLens",
+        "icon": "$(eye)"
+      }
     ],
     "views": {
       "explorer": [
@@ -35,15 +85,27 @@
           "id": "cThroughView",
           "name": "C Through",
           "icon": "$(type-hierarchy)",
-          "contextualTitle": "C Through — Function Relations"
+          "contextualTitle": "C Through \u2014 Function Relations"
         }
       ]
     },
     "menus": {
       "editor/context": [
-        { "command": "cThrough.showTree",    "when": "resourceLangId == c || resourceLangId == cpp", "group": "c_through@1" },
-        { "command": "cThrough.showCallees", "when": "resourceLangId == c || resourceLangId == cpp", "group": "c_through@2" },
-        { "command": "cThrough.showCallers", "when": "resourceLangId == c || resourceLangId == cpp", "group": "c_through@3" }
+        {
+          "command": "cThrough.showTree",
+          "when": "resourceLangId == c || resourceLangId == cpp",
+          "group": "c_through@1"
+        },
+        {
+          "command": "cThrough.showCallees",
+          "when": "resourceLangId == c || resourceLangId == cpp",
+          "group": "c_through@2"
+        },
+        {
+          "command": "cThrough.showCallers",
+          "when": "resourceLangId == c || resourceLangId == cpp",
+          "group": "c_through@3"
+        }
       ],
       "explorer/context": [
         {
@@ -53,10 +115,31 @@
         }
       ],
       "view/title": [
-        { "command": "cThrough.analyzeWorkspace", "when": "view == cThroughView", "group": "navigation@1" },
-        { "command": "cThrough.analyzeDirectory", "when": "view == cThroughView", "group": "navigation@2" },
-        { "command": "cThrough.rescan",           "when": "view == cThroughView", "group": "navigation@3" },
-        { "command": "cThrough.analyzeFile",      "when": "view == cThroughView", "group": "navigation@4" }
+        {
+          "command": "cThrough.analyzeWorkspace",
+          "when": "view == cThroughView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cThrough.analyzeDirectory",
+          "when": "view == cThroughView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cThrough.rescan",
+          "when": "view == cThroughView",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cThrough.analyzeFile",
+          "when": "view == cThroughView",
+          "group": "navigation@4"
+        },
+        {
+          "command": "cThrough.toggleCodeLens",
+          "when": "view == cThroughView",
+          "group": "navigation@5"
+        }
       ]
     },
     "configuration": {
@@ -86,6 +169,11 @@
           "type": "string",
           "default": "**/node_modules/**",
           "description": "Glob pattern for paths to exclude. E.g. '{**/build/**,**/third_party/**}'"
+        },
+        "cThrough.enableCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline CodeLens above every C/C++ function (callers, calls, complexity, dead code warnings)."
         }
       }
     }

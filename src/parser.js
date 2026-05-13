@@ -196,12 +196,16 @@ class CParser {
       const params = this._parseParams(m[2]);
       const calls = this._extractCalls(body, name);
       const refs = this._extractVariableRefs(body);
+      const complexity = this._cyclomaticComplexity(body);
+      const isEntryPoint = this._isEntryPoint(name);
       functions.push({
         name,
         line: lineNo,
         params,
         calls,
         refs,
+        complexity,
+        isEntryPoint,
         bodyLength: body.split('\n').length,
         isStatic: m[0].startsWith('static'),
         returnType: m[0].slice(0, m[0].indexOf(name)).trim()
@@ -246,6 +250,26 @@ class CParser {
       calls.set(name, calls.get(name) + 1);
     }
     return Array.from(calls.entries()).map(([name, count]) => ({ name, count, isStdLib: this.stdLibFunctions.has(name) }));
+  }
+
+  /**
+   * Cyclomatic complexity = 1 + number of decision points in function body.
+   * Decision points: if, else if, for, while, do, case, &&, ||, ?
+   */
+  _cyclomaticComplexity(body) {
+    const decisionRe = /(if|else\s+if|for|while|do|case)|(\?\s*[^:])|(&&|\|\|)/g;
+    let count = 1;
+    let m;
+    while ((m = decisionRe.exec(body)) !== null) count++;
+    return count;
+  }
+
+  /**
+   * Heuristic: is this function a known entry point?
+   * These are expected to have 0 callers and should NOT be flagged as dead code.
+   */
+  _isEntryPoint(name) {
+    return /^(main|app_main|startup|reset_handler|hardfault_handler|.*_irqhandler|.*_isr|.*_handler|.*_task|.*_thread|test_.*|setup|loop|init|vApplicationIdleHook|vApplicationTickHook)$/i.test(name);
   }
 
   _extractVariableRefs(body) {

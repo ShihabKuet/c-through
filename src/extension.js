@@ -6,8 +6,9 @@ const CParser = require('./parser');
 const AnalysisDB = require('./analysisDB');
 const CTreeProvider = require('./treeProvider');
 const TreeWebView = require('./treeWebView');
+const CThroughCodeLensProvider = require('./codeLensProvider');
 
-let db, parser, treeProvider, webView;
+let db, parser, treeProvider, webView, codeLensProvider;
 let lastScanRoot = undefined;
 
 async function activate(context) {
@@ -15,6 +16,15 @@ async function activate(context) {
   db = new AnalysisDB();
   treeProvider = new CTreeProvider(db);
   webView = new TreeWebView(context, db);
+
+  // CodeLens provider
+  codeLensProvider = new CThroughCodeLensProvider(db);
+  context.subscriptions.push(
+    vscode.languages.registerCodeLensProvider(
+      [{ language: 'c' }, { language: 'cpp' }],
+      codeLensProvider
+    )
+  );
 
   const treeView = vscode.window.createTreeView('cThroughView', {
     treeDataProvider: treeProvider,
@@ -70,15 +80,24 @@ async function activate(context) {
     const fn = await getFunctionAtCursor() || await askFunctionName();
     if (fn) webView.show(fn, 'callees');
   }));
-  context.subscriptions.push(vscode.commands.registerCommand('cThrough.showCallees', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('cThrough.showCallees', async (fnArg) => {
     await ensureCurrentFileAnalyzed();
-    const fn = await getFunctionAtCursor() || await askFunctionName();
+    const fn = fnArg || await getFunctionAtCursor() || await askFunctionName();
     if (fn) webView.show(fn, 'callees');
   }));
-  context.subscriptions.push(vscode.commands.registerCommand('cThrough.showCallers', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('cThrough.showCallers', async (fnArg) => {
     await ensureCurrentFileAnalyzed();
-    const fn = await getFunctionAtCursor() || await askFunctionName();
+    const fn = fnArg || await getFunctionAtCursor() || await askFunctionName();
     if (fn) webView.show(fn, 'callers');
+  }));
+
+  // Toggle CodeLens on/off
+  context.subscriptions.push(vscode.commands.registerCommand('cThrough.toggleCodeLens', async () => {
+    const cfg = vscode.workspace.getConfiguration('cThrough');
+    const current = cfg.get('enableCodeLens', true);
+    await cfg.update('enableCodeLens', !current, vscode.ConfigurationTarget.Global);
+    codeLensProvider.refresh();
+    vscode.window.showInformationMessage(`C Through: CodeLens ${!current ? 'enabled' : 'disabled'}`);
   }));
 
   // 8. Jump to source line
@@ -171,6 +190,7 @@ async function runDirectoryScan(dirPath) {
       (errors ? `  (${errors} errors)` : '')
     );
     treeProvider.refresh();
+    codeLensProvider.refresh();
   });
 }
 
@@ -188,6 +208,7 @@ async function analyzeOneFile(filePath, text) {
     db.removeFile(filePath);
     db.addFile(parser.parseFile(text, filePath));
     treeProvider.refresh();
+    codeLensProvider.refresh();
   } catch (e) { console.error('analyzeOneFile:', e); }
 }
 
