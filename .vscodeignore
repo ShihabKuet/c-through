@@ -1,0 +1,14 @@
+node_modules/**
+.vscode/**
+.git/**
+.gitignore
+*.vsix
+*.zip
+images/*.xcf
+images/*.psd
+.eslintrc*
+.prettierrc*
+CONTRIBUTING.md
+CHANGELOG.md
+**/*.test.js
+**/*.spec.js

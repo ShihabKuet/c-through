@@ -1,55 +1,118 @@
 # C Through
 
-A VS Code extension that provides **Source Insight-style relational function trees** for C/C++ code. See through your entire codebase — function call hierarchies, callers, callees, global references, and cross-file relationships, all visualized interactively.
+> **See through your C/C++ codebase.** Source Insight-style relational function trees, call graphs, CodeLens inline metrics, and cross-file reference analysis — all inside VS Code.
 
 ---
 
 ## Features
 
-### 🌳 Sidebar Tree View (C Through panel)
-- Full file breakdown: **Includes · Structs/Types · Macros · Globals · Functions**
-- Each function shows callers, callees, return type, parameters, line number
-- Click any item → jumps directly to source
+### 🌳 Sidebar Tree View
+A live, structured breakdown of every C/C++ file — organized into collapsible sections:
 
-### 🔍 Interactive Call Graph (WebView)
-- Visual node-graph with pan (drag) and zoom (scroll)
-- Color-coded: root (blue), internal (green), external (orange), recursive (red)
-- Click node → jump to source · Double-click → collapse/expand subtree
-- Switch between **▼ Callees** and **▲ Callers** view
-- Drill into any node as a new root
+- **Includes** — all `#include` dependencies with system vs local distinction
+- **Structs / Types** — every `struct` and `typedef` with field listings
+- **Macros** — function-like and value macros with their expansions
+- **Global Variables** — file-scope variable declarations
+- **Functions** — every function with its callers, callees, return type, and line number
 
-### 📂 Flexible Scope — File, Directory, or Workspace
-- **Analyze Current File** — single file only
-- **Analyze This Directory** — right-click any folder in Explorer
-- **Analyze Entire Workspace** — all C/C++ files, no file cap
-- **Re-scan Last Scope** — one-click repeat of previous scan
+Click any item to jump directly to its definition in the source file.
 
-### ⚡ Cross-file Analysis
-- Full cross-file caller/callee index after any multi-file scan
-- Incremental save refresh — only the saved file is re-parsed
+---
+
+### 🔍 Interactive Call Graph
+A fully interactive visual graph of function call relationships.
+
+- **Pan** — click and drag the canvas
+- **Zoom** — scroll wheel or +/− buttons
+- **Click node** — jump to source + inspect details in sidebar
+- **Double-click node** — collapse or expand that node's children independently
+- **Click +N badge** — toggle a single node without affecting siblings
+- **⬇ Top→Down / ➡ Left→Right** — toggle layout direction
+- **Drill down** — re-root the tree on any node
+
+**Node colors:**
+
+| Color | Meaning |
+|---|---|
+| 🔵 Blue | Root function (current focus) |
+| 🟢 Green | Internal project function |
+| 🟠 Orange | External / unknown function |
+| 🔴 Red | Recursive call detected |
+
+---
+
+### 💡 CodeLens Inline Metrics
+Clickable annotations appear directly above every function definition — no panel switching required.
+
+```c
+  ↑ 4 callers  ↓ 7 calls  🟡 complexity: 11  📄 main.c, driver.c
+  int process_packet(PacketHeader *hdr, uint8_t *buf, int len) {
+```
+
+| Lens | Click Action |
+|---|---|
+| `↑ N callers` | Open callers tree |
+| `↓ N calls` | Open callees tree |
+| `🟢/🟡/🔴 complexity: N` | Open relational tree |
+| `📄 file1.c, file2.c` | Open callers tree (cross-file) |
+| `⚠ dead code — no callers found` | Trigger workspace scan |
+
+**Complexity thresholds:**
+- 🟢 1–9 — Simple, easy to test
+- 🟡 10–19 — High, consider refactoring
+- 🔴 20+ — Very high, hard to maintain
+
+---
+
+### 📂 Flexible Scan Scope
+
+| Scope | How |
+|---|---|
+| Single file | Auto-analyzed on open |
+| Specific directory | Right-click any folder → **C Through: Analyze This Directory** |
+| Entire workspace | **C Through: Analyze Entire Workspace** |
+| Re-scan | **Re-scan Last Scope** button in sidebar toolbar |
+
+Cross-file caller/callee relationships are fully resolved after any multi-file scan.
 
 ---
 
 ## Installation
 
-```bash
-code --install-extension c-through-1.1.0.vsix
-```
+### From VS Code Marketplace
+1. Press `Ctrl+Shift+X`
+2. Search **"C Through"**
+3. Click **Install**
 
-Or: Extensions panel (`Ctrl+Shift+X`) → `···` menu → **Install from VSIX...**
+### From VSIX
+```bash
+code --install-extension c-through-1.2.2.vsix
+```
 
 ---
 
 ## Usage
 
-| Action | How |
+### Quick Start
+1. Open any `.c` or `.h` file — auto-analyzed, **C Through** panel appears in Explorer sidebar
+2. Place cursor on any function name → right-click → **C Through: Show Relational Tree**
+
+### Commands (`Ctrl+Shift+P`)
+
+| Command | Description |
 |---|---|
-| Open a `.c` file | Tree auto-populates in sidebar |
-| Scan a directory | Right-click folder → **C Through: Analyze This Directory** |
-| Scan whole project | `Ctrl+Shift+P` → **C Through: Analyze Entire Workspace** |
-| Visual call graph | Cursor on function name → right-click → **C Through: Show Relational Tree** |
-| Show callers | Right-click → **C Through: Show Functions Calling This** |
-| Show callees | Right-click → **C Through: Show Functions Called By This** |
+| `C Through: Analyze Current File` | Parse the active C/C++ file |
+| `C Through: Analyze Entire Workspace` | Scan all C/C++ files in workspace |
+| `C Through: Analyze This Directory` | Pick a folder to scan |
+| `C Through: Re-scan Last Scope` | Repeat the previous scan |
+| `C Through: Show Relational Tree` | Open call graph for symbol at cursor |
+| `C Through: Show Functions Called By This` | Open callees tree |
+| `C Through: Show Functions Calling This` | Open callers tree |
+| `C Through: Toggle CodeLens` | Show/hide inline CodeLens |
+
+### Context Menus
+- **Editor** — right-click inside any C/C++ file for tree commands
+- **Explorer** — right-click any folder for **Analyze This Directory**
 
 ---
 
@@ -57,30 +120,69 @@ Or: Extensions panel (`Ctrl+Shift+X`) → `···` menu → **Install from VSIX.
 
 | Setting | Default | Description |
 |---|---|---|
-| `cThrough.maxDepth` | `5` | Max call tree depth |
-| `cThrough.showStdLib` | `false` | Show stdlib calls (printf, malloc…) |
-| `cThrough.autoRefresh` | `true` | Re-parse on file save |
-| `cThrough.includeGlob` | `**/*.{c,h,cpp,hpp}` | Files to include in scan |
+| `cThrough.maxDepth` | `5` | Maximum call tree traversal depth |
+| `cThrough.showStdLib` | `false` | Include stdlib calls in tree |
+| `cThrough.autoRefresh` | `true` | Re-parse file on save |
+| `cThrough.enableCodeLens` | `true` | Show inline CodeLens |
+| `cThrough.includeGlob` | `**/*.{c,h,cpp,hpp}` | File pattern for scan |
 | `cThrough.excludeGlob` | `**/node_modules/**` | Paths to exclude from scan |
 
-**Example** — scan only `src/`, skip `build/` and `third_party/`:
+**Example — scan only `src/`, skip `build/` and `vendor/`:**
 ```json
-"cThrough.includeGlob": "src/**/*.{c,h}",
-"cThrough.excludeGlob": "{**/build/**,**/third_party/**}"
+{
+  "cThrough.includeGlob": "src/**/*.{c,h}",
+  "cThrough.excludeGlob": "{**/build/**,**/vendor/**,**/third_party/**}"
+}
 ```
 
 ---
 
-## File Structure
+## How It Works
 
-```
-c-through/
-├── src/
-│   ├── extension.js      — Activation, commands, auto-refresh
-│   ├── parser.js         — C/C++ static parser (regex-based, no LSP)
-│   ├── analysisDB.js     — Cross-file function/call index
-│   ├── treeProvider.js   — VS Code sidebar TreeDataProvider
-│   └── treeWebView.js    — Interactive SVG call graph panel
-├── package.json
-└── README.md
-```
+C Through uses **regex-based static analysis** — no compiler, no language server, no build system required. Works on any C/C++ file that can be opened in VS Code.
+
+The parser:
+1. Strips comments and string literals
+2. Extracts `#include`, `#define`, `struct`/`typedef` definitions
+3. Identifies function definitions by signature pattern matching
+4. Extracts all call sites inside each function body
+5. Calculates cyclomatic complexity per function
+6. Builds a cross-file caller/callee index across all scanned files
+
+---
+
+## Known Limitations
+
+- Function pointers are detected but cannot be statically resolved to targets
+- Heavily macro-expanded signatures may not be fully parsed
+- Very large files (10,000+ lines) may have partial symbol extraction
+- C++ template specializations may be missed
+
+---
+
+## Changelog
+
+### v1.2.2
+- Added **CodeLens** inline annotations (callers, callees, complexity, dead code warning)
+- Added **cyclomatic complexity** calculation per function
+- Added **Toggle CodeLens** command and sidebar button
+
+### v1.1.0
+- Added **Analyze This Directory** — right-click any folder in Explorer
+- Removed 200-file scan cap — workspace scan now unlimited
+- Added **Re-scan Last Scope** button
+- Added `includeGlob` / `excludeGlob` settings
+- Scope-aware auto-refresh on save
+
+### v1.0.0
+- Initial release
+- Sidebar tree: includes, structs, macros, globals, functions
+- Interactive call graph with pan/zoom
+- Cross-file caller/callee analysis
+- Auto-analyze on file open
+
+---
+
+## License
+
+MIT © 2025

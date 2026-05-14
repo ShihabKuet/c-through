@@ -1,7 +1,7 @@
 {
   "name": "c-through",
   "displayName": "C Through",
-  "icon": "icon.png",
+  "icon": "images/icon.png",
   "description": "Relational function call tree and reference visualizer for C/C++ code",
   "version": "1.2.2",
   "publisher": "ShanjidArefin",
@@ -170,6 +170,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show inline CodeLens above every C/C++ function (callers, calls, complexity, dead code warnings)."
+        },
+        "cThrough.maxLinesPerFile": {
+          "type": "number",
+          "default": 8000,
+          "description": "Maximum lines to parse per file. Files larger than this are truncated. Increase for large codebases."
         }
       }
     }
