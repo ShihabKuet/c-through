@@ -1,13 +1,14 @@
 {
   "name": "c-through",
   "displayName": "C Through",
-  "description": "Source Insight-style relational function call tree and reference visualizer for C/C++ code",
-  "version": "1.2.0",
-  "publisher": "devtools",
+  "icon": "icon.png",
+  "description": "Relational function call tree and reference visualizer for C/C++ code",
+  "version": "1.2.2",
+  "publisher": "ShanjidArefin",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/local/c-through"
+    "url": "https://github.com/ShihabKuet/c-through"
   },
   "engines": {
     "vscode": "^1.75.0"
@@ -28,12 +29,7 @@
   ],
   "activationEvents": [
     "onLanguage:c",
-    "onLanguage:cpp",
-    "onCommand:cThrough.showTree",
-    "onCommand:cThrough.showCallees",
-    "onCommand:cThrough.showCallers",
-    "onCommand:cThrough.analyzeDirectory",
-    "onView:cThroughView"
+    "onLanguage:cpp"
   ],
   "main": "./src/extension.js",
   "contributes": {

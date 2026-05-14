@@ -240,6 +240,10 @@ class TreeWebView {
   <div id="toolbar">
     <button id="btn-callees" onclick="switchMode('callees')">▼ Callees</button>
     <button id="btn-callers" onclick="switchMode('callers')">▲ Callers</button>
+    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <button id="btn-layout-td" onclick="setLayout('topdown')" class="active" title="Tree grows top to bottom">⬇ Top→Down</button>
+    <button id="btn-layout-lr" onclick="setLayout('leftright')" title="Tree grows left to right">➡ Left→Right</button>
+    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
     <button onclick="resetView()">⟳ Reset View</button>
     <button onclick="expandAll()">Expand All</button>
     <button onclick="collapseAll()">Collapse All</button>
@@ -281,10 +285,20 @@ const vscode = acquireVsCodeApi();
 const rawTree = ${treeJson};
 const rootFunc = ${JSON.stringify(rootFunc)};
 let currentMode = ${JSON.stringify(mode)};
-let allNodes = [], allLinks = [];
+let layoutDir = 'topdown'; // 'topdown' | 'leftright'
 let transform = { x: 0, y: 0, scale: 1 };
 let isDragging = false, dragStart = { x: 0, y: 0 };
-let collapsedNodes = new Set();
+let didDrag = false;
+
+// ─── Collapse state ───────────────────────────────────────────────────────────
+// Key: stable string = "depth:parentName:name"
+// true  = node is collapsed (children hidden)
+// false / absent = node is expanded
+const collapseState = new Map();
+
+// rawChildCount: number of direct children in the ORIGINAL tree, by key.
+// Kept so collapsed nodes can show "+N" even when children aren't in allNodes.
+const rawChildCount = new Map();
 
 const stats = ${JSON.stringify(stats)};
 
@@ -292,31 +306,64 @@ document.getElementById('root-label').textContent = rootFunc;
 document.getElementById('mode-label').textContent = currentMode === 'callers' ? '▲ Callers' : '▼ Callees';
 document.getElementById('btn-' + currentMode).classList.add('active');
 
-// Stats panel
 const statsEl = document.getElementById('stats-panel');
 statsEl.innerHTML = [
-  ['Files', stats.files],
-  ['Functions', stats.functions],
-  ['Calls', stats.calls],
-  ['Structs', stats.structs]
+  ['Files', stats.files], ['Functions', stats.functions],
+  ['Calls', stats.calls], ['Structs', stats.structs]
 ].map(([k,v]) => \`<div class="info-row"><span class="info-label">\${k}</span><span class="info-value">\${v}</span></div>\`).join('');
 
-function switchMode(mode) {
-  vscode.postMessage({ type: mode === 'callers' ? 'showCallers' : 'showCallees', funcName: rootFunc });
+function switchMode(m) {
+  vscode.postMessage({ type: m === 'callers' ? 'showCallers' : 'showCallees', funcName: rootFunc });
 }
 
-// ─── Layout ──────────────────────────────────────────────────────────────────
-function flattenTree(node, parent = null, depth = 0, x = 0, counter = { v: 0 }) {
-  const id = counter.v++;
-  const n = { id, name: node.name, file: node.file, line: node.line, depth,
+// ─── Layout direction toggle ──────────────────────────────────────────────────
+function setLayout(dir) {
+  layoutDir = dir;
+  document.getElementById('btn-layout-td').classList.toggle('active', dir === 'topdown');
+  document.getElementById('btn-layout-lr').classList.toggle('active', dir === 'leftright');
+  render();
+  fitView();
+}
+
+// ─── Stable node key ──────────────────────────────────────────────────────────
+function nodeKey(name, depth, parentName) {
+  return depth + ':' + (parentName || '') + ':' + name;
+}
+
+// ─── Pre-scan raw tree once to fill rawChildCount ─────────────────────────────
+function prescan(node, depth, parentName) {
+  const key = nodeKey(node.name, depth, parentName);
+  rawChildCount.set(key, node.children ? node.children.length : 0);
+  if (node.children) {
+    for (const child of node.children) prescan(child, depth + 1, node.name);
+  }
+}
+prescan(rawTree, 0, null);
+
+// ─── Flatten tree ─────────────────────────────────────────────────────────────
+// Respects collapseState per node key independently.
+let allNodes = [], allLinks = [];
+
+function flattenTree(node, parent, depth, parentName, counter) {
+  const key = nodeKey(node.name, depth, parentName);
+  const id  = counter.v++;
+  const n   = {
+    id, key,
+    name: node.name, file: node.file, line: node.line, depth,
     returnType: node.returnType, params: node.params,
     truncated: node.truncated, external: node.external,
-    parentId: parent ? parent.id : null, children: [] };
+    parentId: parent ? parent.id : null,
+    children: [],
+    rawChildCount: rawChildCount.get(key) || 0
+  };
   allNodes.push(n);
   if (parent) allLinks.push({ source: parent.id, target: n.id });
-  if (node.children && node.children.length && !collapsedNodes.has(id)) {
+
+  // Only descend if THIS node is not collapsed
+  const collapsed = collapseState.get(key) === true;
+  if (!collapsed && node.children && node.children.length) {
     for (const child of node.children) {
-      n.children.push(flattenTree(child, n, depth + 1, 0, counter));
+      n.children.push(flattenTree(child, n, depth + 1, node.name, counter));
     }
   }
   return n;
@@ -324,197 +371,248 @@ function flattenTree(node, parent = null, depth = 0, x = 0, counter = { v: 0 }) 
 
 function computeLayout() {
   allNodes = []; allLinks = [];
-  const root = flattenTree(rawTree);
+  flattenTree(rawTree, null, 0, null, { v: 0 });
 
-  // Assign y based on depth, x based on subtree
-  const nodesByDepth = {};
-  for (const n of allNodes) {
-    if (!nodesByDepth[n.depth]) nodesByDepth[n.depth] = [];
-    nodesByDepth[n.depth].push(n);
+  if (layoutDir === 'topdown') {
+    // ── Top → Down ────────────────────────────────────────────────────────────
+    const nodeW = 180, nodeH = 72;
+    let leafX = 0;
+    function assignX(node) {
+      if (node.children.length === 0) { node.x = leafX; leafX += nodeW; return; }
+      for (const c of node.children) assignX(c);
+      node.x = (node.children[0].x + node.children[node.children.length - 1].x) / 2;
+    }
+    assignX(allNodes[0]);
+    for (const n of allNodes) n.y = n.depth * nodeH + 50;
+  } else {
+    // ── Left → Right ──────────────────────────────────────────────────────────
+    const nodeW = 210, nodeH = 68;
+    let leafY = 0;
+    function assignY(node) {
+      if (node.children.length === 0) { node.y = leafY; leafY += nodeH; return; }
+      for (const c of node.children) assignY(c);
+      node.y = (node.children[0].y + node.children[node.children.length - 1].y) / 2;
+    }
+    assignY(allNodes[0]);
+    for (const n of allNodes) n.x = n.depth * nodeW + 50;
   }
-
-  const nodeH = 72, nodeW = 180;
-  // Bottom-up x assignment
-  function assignX(node) {
-    if (node.children.length === 0) return;
-    for (const c of node.children) assignX(c);
-    node.x = (node.children[0].x + node.children[node.children.length-1].x) / 2;
-  }
-
-  // Assign leaf x positions
-  let leafX = 0;
-  function assignLeafX(node) {
-    if (node.children.length === 0) { node.x = leafX; leafX += nodeW; return; }
-    for (const c of node.children) assignLeafX(c);
-    node.x = (node.children[0].x + node.children[node.children.length-1].x) / 2;
-  }
-  assignLeafX(allNodes[0]);
-
-  for (const n of allNodes) n.y = n.depth * nodeH + 50;
-
-  return allNodes[0];
 }
 
-// ─── Render ───────────────────────────────────────────────────────────────
+// ─── Render ───────────────────────────────────────────────────────────────────
 const svg = document.getElementById('tree-svg');
-let g; // main group for pan/zoom
+let g;
 
 function render() {
+  computeLayout();
   svg.innerHTML = '';
-  const root = computeLayout();
 
-  // Defs
-  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   defs.innerHTML = \`
     <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
       <path d="M0,0 L0,6 L8,3 z" fill="#30363d"/>
     </marker>
-    <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  \`;
+    </filter>\`;
   svg.appendChild(defs);
 
-  g = document.createElementNS('http://www.w3.org/2000/svg','g');
-  g.setAttribute('id','main-g');
+  g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('id', 'main-g');
   svg.appendChild(g);
 
   // Links
-  for (const link of allLinks) {
-    const s = allNodes.find(n => n.id === link.source);
-    const t = allNodes.find(n => n.id === link.target);
+  for (const lnk of allLinks) {
+    const s = allNodes.find(n => n.id === lnk.source);
+    const t = allNodes.find(n => n.id === lnk.target);
     if (!s || !t) continue;
-    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-    const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
-    path.setAttribute('d', \`M\${s.x},\${s.y+22} C\${s.x},\${my} \${t.x},\${my} \${t.x},\${t.y-22}\`);
-    path.setAttribute('class','link');
-    path.setAttribute('marker-end','url(#arrow)');
-    g.appendChild(path);
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    let d;
+    if (layoutDir === 'topdown') {
+      const my = (s.y + t.y) / 2;
+      d = \`M\${s.x},\${s.y+22} C\${s.x},\${my} \${t.x},\${my} \${t.x},\${t.y-22}\`;
+    } else {
+      const mx = (s.x + t.x) / 2;
+      d = \`M\${s.x+22},\${s.y} C\${mx},\${s.y} \${mx},\${t.y} \${t.x-22},\${t.y}\`;
+    }
+    el.setAttribute('d', d);
+    el.setAttribute('class', 'link');
+    el.setAttribute('marker-end', 'url(#arrow)');
+    g.appendChild(el);
   }
 
   // Nodes
   for (const n of allNodes) {
-    const grp = document.createElementNS('http://www.w3.org/2000/svg','g');
-    grp.setAttribute('class','node');
-    grp.setAttribute('transform',\`translate(\${n.x},\${n.y})\`);
+    const color = n.id === 0 ? '#58a6ff'
+      : n.truncated ? '#f85149'
+      : n.external   ? '#d29922'
+      : '#3fb950';
+    const isCollapsed = collapseState.get(n.key) === true;
 
-    const color = n.id === 0 ? '#58a6ff' :
-      n.truncated ? '#f85149' :
-      n.external ? '#d29922' :
-      '#3fb950';
+    const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    grp.setAttribute('class', 'node');
+    grp.setAttribute('transform', \`translate(\${n.x},\${n.y})\`);
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    circle.setAttribute('r','20');
+    // Circle
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('r', '20');
     circle.setAttribute('fill', color + '22');
     circle.setAttribute('stroke', color);
-    if (n.id === 0) circle.setAttribute('filter','url(#glow)');
+    if (n.id === 0) circle.setAttribute('filter', 'url(#glow)');
     grp.appendChild(circle);
 
-    // Icon letter
-    const letter = document.createElementNS('http://www.w3.org/2000/svg','text');
-    letter.setAttribute('text-anchor','middle');
-    letter.setAttribute('dominant-baseline','central');
+    // Initial letter
+    const letter = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    letter.setAttribute('text-anchor', 'middle');
+    letter.setAttribute('dominant-baseline', 'central');
     letter.setAttribute('fill', color);
-    letter.setAttribute('font-size','12');
-    letter.setAttribute('font-weight','bold');
+    letter.setAttribute('font-size', '12');
+    letter.setAttribute('font-weight', 'bold');
     letter.textContent = n.name[0].toUpperCase();
     grp.appendChild(letter);
 
-    // Label
-    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
-    label.setAttribute('text-anchor','middle');
-    label.setAttribute('y','32');
-    label.setAttribute('fill','#e6edf3');
-    label.setAttribute('font-size','11');
-    const maxLen = 18;
-    label.textContent = n.name.length > maxLen ? n.name.slice(0,maxLen)+'…' : n.name;
+    // Name label — below circle for TopDown, right of circle for LeftRight
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    if (layoutDir === 'topdown') {
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('x', '0');
+      label.setAttribute('y', '32');
+    } else {
+      label.setAttribute('text-anchor', 'start');
+      label.setAttribute('x', '24');
+      label.setAttribute('y', '4');
+    }
+    label.setAttribute('fill', '#e6edf3');
+    label.setAttribute('font-size', '11');
+    label.textContent = n.name.length > 18 ? n.name.slice(0, 18) + '…' : n.name;
     grp.appendChild(label);
 
-    // Child count badge
-    if (n.children.length > 0 || collapsedNodes.has(n.id)) {
-      const badge = document.createElementNS('http://www.w3.org/2000/svg','g');
-      badge.setAttribute('transform','translate(14,-14)');
-      const br = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      br.setAttribute('r','8'); br.setAttribute('fill','#21262d'); br.setAttribute('stroke',color);
+    // ROOT label — above circle for TopDown, left of circle for LeftRight
+    if (n.depth === 0) {
+      const rootLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      rootLbl.setAttribute('fill', '#8b949e');
+      rootLbl.setAttribute('font-size', '9');
+      rootLbl.textContent = 'ROOT';
+      if (layoutDir === 'topdown') {
+        rootLbl.setAttribute('text-anchor', 'middle');
+        rootLbl.setAttribute('x', '0');
+        rootLbl.setAttribute('y', '-30');
+      } else {
+        rootLbl.setAttribute('text-anchor', 'end');
+        rootLbl.setAttribute('x', '-24');
+        rootLbl.setAttribute('y', '4');
+      }
+      grp.appendChild(rootLbl);
+    }
+
+    // Badge — shown whenever this node has children (collapsed or expanded).
+    // Filled background when collapsed so it's visually obvious.
+    // Click on badge = toggle THIS node only.
+    if (n.rawChildCount > 0) {
+      const badge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      badge.setAttribute('transform', 'translate(14,-14)');
+      badge.style.cursor = 'pointer';
+
+      const br = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      br.setAttribute('r', '9');
+      br.setAttribute('fill', isCollapsed ? color : '#21262d');
+      br.setAttribute('stroke', color);
       badge.appendChild(br);
-      const bt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      bt.setAttribute('text-anchor','middle'); bt.setAttribute('dominant-baseline','central');
-      bt.setAttribute('fill',color); bt.setAttribute('font-size','8');
-      bt.textContent = collapsedNodes.has(n.id) ? '+' : n.children.length;
+
+      const bt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      bt.setAttribute('text-anchor', 'middle');
+      bt.setAttribute('dominant-baseline', 'central');
+      bt.setAttribute('fill', isCollapsed ? '#000' : color);
+      bt.setAttribute('font-size', '8');
+      bt.setAttribute('font-weight', 'bold');
+      // Collapsed: show "+N" (how many hidden children). Expanded: show current child count.
+      bt.textContent = isCollapsed ? ('+' + n.rawChildCount) : n.children.length;
       badge.appendChild(bt);
+
+      // Badge click: toggle only this node's children
+      badge.addEventListener('click', e => { e.stopPropagation(); toggleNode(n.key); });
       grp.appendChild(badge);
     }
 
-    // Depth indicator line
-    const depthLine = document.createElementNS('http://www.w3.org/2000/svg','text');
-    depthLine.setAttribute('text-anchor','middle');
-    depthLine.setAttribute('y','-30');
-    depthLine.setAttribute('fill','#8b949e');
-    depthLine.setAttribute('font-size','9');
-    if (n.depth === 0) depthLine.textContent = 'ROOT';
-    grp.appendChild(depthLine);
-
-    grp.addEventListener('click', (e) => {
+    // Single-click: select node + jump to source
+    grp.addEventListener('click', e => {
+      if (didDrag) return;
       e.stopPropagation();
       onNodeClick(n);
     });
-    grp.addEventListener('dblclick', (e) => {
+
+    // Double-click: toggle only THIS node's direct children (not whole subtree)
+    grp.addEventListener('dblclick', e => {
       e.stopPropagation();
-      toggleCollapse(n.id);
+      toggleNode(n.key);
     });
 
     g.appendChild(grp);
   }
 
   applyTransform();
+}
+
+// ─── Toggle a single node ─────────────────────────────────────────────────────
+// ONLY flips the collapse state of the node with this key.
+// Siblings, children of children — all unaffected.
+function toggleNode(key) {
+  collapseState.set(key, !(collapseState.get(key) === true));
+  render();
+  // Intentionally do NOT call fitView() — user keeps their current pan/zoom position.
+}
+
+// ─── Expand All ───────────────────────────────────────────────────────────────
+// Clears every collapse flag so the full tree is visible.
+function expandAll() {
+  collapseState.clear();
+  render();
   fitView();
 }
 
+// ─── Collapse All ─────────────────────────────────────────────────────────────
+// Marks every node that has children as collapsed.
+// Each node is still independently toggleable afterward.
+function collapseAll() {
+  function markAll(node, depth, parentName) {
+    const key = nodeKey(node.name, depth, parentName);
+    if (node.children && node.children.length > 0) {
+      collapseState.set(key, true);
+      for (const child of node.children) markAll(child, depth + 1, node.name);
+    }
+  }
+  markAll(rawTree, 0, null);
+  render();
+  fitView();
+}
+
+// ─── Node click ───────────────────────────────────────────────────────────────
 function onNodeClick(n) {
-  // Highlight
   document.querySelectorAll('.node circle').forEach(c => c.style.strokeWidth = '2');
-  const nodes = document.querySelectorAll('.node');
-  // Update sidebar
   const detailEl = document.getElementById('fn-details');
-  detailEl.innerHTML = \`
-    <div class="info-row"><span class="info-label">Name</span><span class="info-value func">\${n.name}</span></div>
-    \${n.file ? \`<div class="info-row"><span class="info-label">File</span><span class="info-value file">\${n.file.split(/[\\\\/]/).pop()}</span></div>\` : ''}
-    \${n.line ? \`<div class="info-row"><span class="info-label">Line</span><span class="info-value">\${n.line}</span></div>\` : ''}
-    \${n.returnType ? \`<div class="info-row"><span class="info-label">Returns</span><span class="info-value">\${n.returnType}</span></div>\` : ''}
-    <div class="info-row"><span class="info-label">Depth</span><span class="info-value">\${n.depth}</span></div>
-    <div class="info-row"><span class="info-label">Children</span><span class="info-value">\${n.children.length}</span></div>
-    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-      \${n.file && n.line ? \`<button onclick="jumpTo('\${n.file}', \${n.line})" style="font-size:11px">Go to Source</button>\` : ''}
-      <button onclick="drillCallees('\${n.name}')" style="font-size:11px">▼ Callees</button>
-      <button onclick="drillCallers('\${n.name}')" style="font-size:11px">▲ Callers</button>
-    </div>
-  \`;
+  detailEl.innerHTML =
+    \`<div class="info-row"><span class="info-label">Name</span><span class="info-value func">\${n.name}</span></div>\` +
+    (n.file ? \`<div class="info-row"><span class="info-label">File</span><span class="info-value file">\${n.file.split(/[\\/]/).pop()}</span></div>\` : '') +
+    (n.line ? \`<div class="info-row"><span class="info-label">Line</span><span class="info-value">\${n.line}</span></div>\` : '') +
+    (n.returnType ? \`<div class="info-row"><span class="info-label">Returns</span><span class="info-value">\${n.returnType}</span></div>\` : '') +
+    \`<div class="info-row"><span class="info-label">Depth</span><span class="info-value">\${n.depth}</span></div>\` +
+    \`<div class="info-row"><span class="info-label">Children</span><span class="info-value">\${n.rawChildCount}</span></div>\` +
+    \`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">\` +
+    (n.file && n.line ? \`<button onclick="jumpTo('\${n.file}',\${n.line})" style="font-size:11px">Go to Source</button>\` : '') +
+    \`<button onclick="drillCallees('\${n.name}')" style="font-size:11px">▼ Callees</button>\` +
+    \`<button onclick="drillCallers('\${n.name}')" style="font-size:11px">▲ Callers</button>\` +
+    \`</div>\`;
   document.getElementById('statusbar').textContent =
-    \`\${n.name} · \${n.file ? n.file.split(/[\\\\/]/).pop() : 'external'} · Double-click to collapse/expand subtree\`;
+    n.name + ' · ' + (n.file ? n.file.split(/[\\/]/).pop() : 'external') +
+    ' · Double-click node or click +badge to expand/collapse that node only';
   if (n.file && n.line) vscode.postMessage({ type: 'jumpTo', file: n.file, line: n.line });
 }
 
-function jumpTo(file, line) {
-  vscode.postMessage({ type: 'jumpTo', file, line });
-}
-function drillCallees(name) {
-  vscode.postMessage({ type: 'showCallees', funcName: name });
-}
-function drillCallers(name) {
-  vscode.postMessage({ type: 'showCallers', funcName: name });
-}
-function toggleCollapse(id) {
-  if (collapsedNodes.has(id)) collapsedNodes.delete(id);
-  else collapsedNodes.add(id);
-  render();
-}
-function expandAll() { collapsedNodes.clear(); render(); }
-function collapseAll() {
-  for (const n of allNodes) if (n.children.length) collapsedNodes.add(n.id);
-  render();
-}
+function jumpTo(file, line) { vscode.postMessage({ type: 'jumpTo', file, line }); }
+function drillCallees(name) { vscode.postMessage({ type: 'showCallees', funcName: name }); }
+function drillCallers(name) { vscode.postMessage({ type: 'showCallers', funcName: name }); }
 
-// ─── Pan & Zoom ───────────────────────────────────────────────────────────
+// ─── Pan & Zoom ───────────────────────────────────────────────────────────────
 function applyTransform() {
   if (!g) return;
   g.setAttribute('transform', \`translate(\${transform.x},\${transform.y}) scale(\${transform.scale})\`);
@@ -532,17 +630,18 @@ function fitView() {
   applyTransform();
 }
 function resetView() { fitView(); }
-function zoomIn() { transform.scale = Math.min(transform.scale * 1.2, 4); applyTransform(); }
+function zoomIn()  { transform.scale = Math.min(transform.scale * 1.2, 4);   applyTransform(); }
 function zoomOut() { transform.scale = Math.max(transform.scale / 1.2, 0.2); applyTransform(); }
 
 const cc = document.getElementById('canvas-container');
 cc.addEventListener('mousedown', e => {
-  isDragging = true;
+  isDragging = true; didDrag = false;
   dragStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
   cc.classList.add('grabbing');
 });
 cc.addEventListener('mousemove', e => {
   if (!isDragging) return;
+  didDrag = true;
   transform.x = e.clientX - dragStart.x;
   transform.y = e.clientY - dragStart.y;
   applyTransform();
@@ -560,6 +659,7 @@ cc.addEventListener('wheel', e => {
 }, { passive: false });
 
 render();
+fitView();
 window.addEventListener('resize', fitView);
 </script>
 </body>
