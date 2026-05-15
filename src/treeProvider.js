@@ -115,7 +115,7 @@ class FileItem extends vscode.TreeItem {
     // Includes section
     if (this.fileData.includes.length) {
       sections.push(new SectionItem('Includes', this.fileData.includes.map(inc =>
-        new LeafItem(inc.file, inc.isSystem ? '<system>' : '"local"', 'symbol-file', inc.line)
+        new LeafItem(inc.file, inc.isSystem ? '<system>' : '"local"', 'symbol-file', inc.line, this.filePath)
       )));
     }
 
@@ -131,19 +131,19 @@ class FileItem extends vscode.TreeItem {
     const valMacros = this.fileData.macros.filter(m => !m.isFunctionLike);
     if (fnMacros.length) {
       sections.push(new SectionItem('Function Macros', fnMacros.map(m =>
-        new LeafItem(`${m.name}(${m.params.join(', ')})`, m.body.slice(0, 40), 'symbol-misc', m.line)
+        new LeafItem(`${m.name}(${m.params.join(', ')})`, m.body.slice(0, 40), 'symbol-misc', m.line, this.filePath)
       )));
     }
     if (valMacros.length) {
       sections.push(new SectionItem('Macros', valMacros.map(m =>
-        new LeafItem(m.name, m.body.slice(0, 40), 'symbol-constant', m.line)
+        new LeafItem(m.name, m.body.slice(0, 40), 'symbol-constant', m.line, this.filePath)
       )));
     }
 
     // Globals section
     if (this.fileData.globals.length) {
       sections.push(new SectionItem('Global Variables', this.fileData.globals.map(g =>
-        new LeafItem(g.name, g.declaration.slice(0, 60), 'symbol-variable', g.line)
+        new LeafItem(g.name, g.declaration.slice(0, 60), 'symbol-variable', g.line, this.filePath)
       )));
     }
 
@@ -308,11 +308,18 @@ class StructItem extends vscode.TreeItem {
 }
 
 class LeafItem extends vscode.TreeItem {
-  constructor(label, description, icon, line) {
+  constructor(label, description, icon, line, filePath) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.description = description || '';
     this.iconPath = new vscode.ThemeIcon(icon || 'circle-small-filled');
     if (line) this.tooltip = `Line ${line}`;
+    if (line && filePath) {
+      this.command = {
+        command: 'cThrough.jumpToFunction',
+        title: 'Go to Definition',
+        arguments: [filePath, line]
+      };
+    }
   }
 }
 
