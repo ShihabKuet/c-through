@@ -80,6 +80,22 @@ class TreeWebView {
     --node-r: 28px;
     --line: #30363d;
   }
+  :root.light {
+    --bg: #ffffff;
+    --bg2: #f3f3f3;
+    --bg3: #e8e8e8;
+    --border: #cccccc;
+    --text: #1a1a1a;
+    --text2: #666666;
+    --accent: #0066cc;
+    --green: #1a7a1a;
+    --orange: #b85c00;
+    --red: #cc2200;
+    --purple: #7b44cc;
+    --cyan: #007a8a;
+    --node-r: 28px;
+    --line: #bbbbbb;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
@@ -244,6 +260,8 @@ class TreeWebView {
     <button id="btn-layout-td" onclick="setLayout('topdown')" class="active" title="Tree grows top to bottom">⬇ Top→Down</button>
     <button id="btn-layout-lr" onclick="setLayout('leftright')" title="Tree grows left to right">➡ Left→Right</button>
     <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <button id="btn-theme" onclick="toggleTheme()" title="Toggle light/dark mode">☀ Light Mode</button>
+    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
     <button onclick="resetView()">⟳ Reset View</button>
     <button onclick="expandAll()">Expand All</button>
     <button onclick="collapseAll()">Collapse All</button>
@@ -323,6 +341,14 @@ function setLayout(dir) {
   document.getElementById('btn-layout-lr').classList.toggle('active', dir === 'leftright');
   render();
   fitView();
+}
+
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  const btn = document.getElementById('btn-theme');
+  btn.textContent = isLight ? '🌙 Dark Mode' : '☀ Light Mode';
+  btn.classList.toggle('active', isLight);
+  render(); // re-render nodes with updated colors
 }
 
 // ─── Stable node key ──────────────────────────────────────────────────────────
@@ -443,10 +469,14 @@ function render() {
 
   // Nodes
   for (const n of allNodes) {
-    const color = n.id === 0 ? '#58a6ff'
-      : n.truncated ? '#f85149'
-      : n.external   ? '#d29922'
-      : '#3fb950';
+    const isDark = !document.documentElement.classList.contains('light');
+    const color = n.id === 0
+      ? (isDark ? '#58a6ff' : '#0066cc')
+      : n.truncated
+        ? (isDark ? '#f85149' : '#cc2200')
+        : n.external
+          ? (isDark ? '#d29922' : '#b85c00')
+          : (isDark ? '#3fb950' : '#1a7a1a');
     const isCollapsed = collapseState.get(n.key) === true;
 
     const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -482,7 +512,7 @@ function render() {
       label.setAttribute('x', '24');
       label.setAttribute('y', '4');
     }
-    label.setAttribute('fill', '#e6edf3');
+    label.setAttribute('fill', isDark ? '#e6edf3' : '#1a1a1a');
     label.setAttribute('font-size', '11');
     label.textContent = n.name.length > 18 ? n.name.slice(0, 18) + '…' : n.name;
     grp.appendChild(label);
@@ -490,7 +520,7 @@ function render() {
     // ROOT label — above circle for TopDown, left of circle for LeftRight
     if (n.depth === 0) {
       const rootLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      rootLbl.setAttribute('fill', '#8b949e');
+      rootLbl.setAttribute('fill', isDark ? '#8b949e' : '#666666');
       rootLbl.setAttribute('font-size', '9');
       rootLbl.textContent = 'ROOT';
       if (layoutDir === 'topdown') {
