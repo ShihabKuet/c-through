@@ -1,6 +1,8 @@
 # C Through
 
 > **See through your C/C++ codebase.** Source Insight-style relational function trees, call graphs, CodeLens inline metrics, and cross-file reference analysis — all inside VS Code.
+> 
+> Current Version: **1.3.0**
 
 ---
 
@@ -86,7 +88,7 @@ Cross-file caller/callee relationships are fully resolved after any multi-file s
 
 ### From VSIX
 ```bash
-code --install-extension c-through-1.2.2.vsix
+code --install-extension c-through-1.3.0.vsix
 ```
 
 ---
@@ -161,6 +163,12 @@ The parser:
 ---
 
 ## Changelog
+
+### v1.3.0
+- Added **Dark / Light mode toggle** button in the call graph toolbar
+- All UI elements switch theme instantly — background, sidebar, legend, links
+- Node colors and function name labels are fully theme-aware
+- Fixed function name labels becoming invisible in light mode
 
 ### v1.2.2
 - Added **CodeLens** inline annotations (callers, callees, complexity, dead code warning)
