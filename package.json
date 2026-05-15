@@ -3,7 +3,7 @@
   "displayName": "C Through",
   "icon": "images/icon.png",
   "description": "Relational function call tree and reference visualizer for C/C++ code",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "publisher": "ShanjidArefin",
   "license": "MIT",
   "repository": {

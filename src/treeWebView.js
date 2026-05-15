@@ -254,17 +254,18 @@ class TreeWebView {
   <span class="badge" id="root-label"></span>
   <span class="badge" id="mode-label"></span>
   <div id="toolbar">
-    <button id="btn-callees" onclick="switchMode('callees')">▼ Callees</button>
-    <button id="btn-callers" onclick="switchMode('callers')">▲ Callers</button>
+    <button id="btn-callees" onclick="switchMode('callees')" title="▼ Callees">▼</button>
+    <button id="btn-callers" onclick="switchMode('callers')" title="▲ Callers">▲</button>
     <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
-    <button id="btn-layout-td" onclick="setLayout('topdown')" class="active" title="Tree grows top to bottom">⬇ Top→Down</button>
-    <button id="btn-layout-lr" onclick="setLayout('leftright')" title="Tree grows left to right">➡ Left→Right</button>
+    <button id="btn-layout-td" onclick="setLayout('topdown')" class="active" title="Top→Down: Tree grows top to bottom">⬇</button>
+    <button id="btn-layout-lr" onclick="setLayout('leftright')" title="Left→Right: Tree grows left to right">➡</button>
     <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
-    <button id="btn-theme" onclick="toggleTheme()" title="Toggle light/dark mode">☀ Light Mode</button>
+    <button id="btn-theme" onclick="toggleTheme()" title="Mode: Toggle light/dark mode">☀</button>
     <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
-    <button onclick="resetView()">⟳ Reset View</button>
-    <button onclick="expandAll()">Expand All</button>
-    <button onclick="collapseAll()">Collapse All</button>
+    <button onclick="resetView()" title="Reset View">⟳</button>
+    <button onclick="expandAll()" title="Expand All">➕</button>
+    <button onclick="collapseAll()" title="Collapse All">➖</button>
+    <button id="btn-sidebar" onclick="toggleSidebar()" title="Expand/Collapse Sidebar">☰</button>
   </div>
 </div>
 <div id="main">
@@ -330,6 +331,13 @@ statsEl.innerHTML = [
   ['Calls', stats.calls], ['Structs', stats.structs]
 ].map(([k,v]) => \`<div class="info-row"><span class="info-label">\${k}</span><span class="info-value">\${v}</span></div>\`).join('');
 
+const savedState = vscode.getState() || {};
+if (savedState.theme === 'light') {
+  document.documentElement.classList.add('light');
+  document.getElementById('btn-theme').textContent = '🌙';
+  document.getElementById('btn-theme').classList.add('active');
+}
+
 function switchMode(m) {
   vscode.postMessage({ type: m === 'callers' ? 'showCallers' : 'showCallees', funcName: rootFunc });
 }
@@ -346,9 +354,27 @@ function setLayout(dir) {
 function toggleTheme() {
   const isLight = document.documentElement.classList.toggle('light');
   const btn = document.getElementById('btn-theme');
-  btn.textContent = isLight ? '🌙 Dark Mode' : '☀ Light Mode';
+  btn.textContent = isLight ? '🌙' : '☀';
   btn.classList.toggle('active', isLight);
+
+  // ← Save to webview state
+  vscode.setState({ ...(vscode.getState() || {}), theme: isLight ? 'light' : 'dark' });  
+
   render(); // re-render nodes with updated colors
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const btn = document.getElementById('btn-sidebar');
+  const isHidden = sidebar.style.display === 'none';
+  sidebar.style.display = isHidden ? 'block' : 'none';
+  btn.classList.toggle('active', isHidden);
+  vscode.setState({ ...(vscode.getState() || {}), sidebar: isHidden ? 'open' : 'closed' });
+}
+
+if (savedState.sidebar === 'closed') {
+  document.getElementById('sidebar').style.display = 'none';
+  document.getElementById('btn-sidebar').classList.remove('active');
 }
 
 // ─── Stable node key ──────────────────────────────────────────────────────────
