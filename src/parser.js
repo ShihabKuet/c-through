@@ -161,18 +161,31 @@ class CParser {
   parseGlobals(code, functionNames) {
     const globals = [];
     const fnSet = new Set(functionNames);
-    // Match type declarations at file scope (very simplified)
-    const re = /^(?:static\s+|extern\s+|const\s+)*(?:unsigned\s+|signed\s+|long\s+|short\s+)*(?:int|char|float|double|long|short|void|bool|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|size_t|FILE)\s*\*?\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:=\s*[^;]+)?;/gm;
+
+    // Match any file-scope variable declaration:
+    // optional qualifiers + any type identifier + optional pointer + name + optional array + optional init + semicolon
+    const re = /^(?:(?:static|extern|const|volatile)\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:struct\s+|enum\s+|union\s+)?([A-Za-z_]\w*)\s*\*?\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\])*\s*(?:=\s*[^;]+)?;/gm;
+
     let m;
     while ((m = re.exec(code)) !== null) {
-      const name = m[1];
-      if (!fnSet.has(name)) {
-        globals.push({
-          name,
-          line: code.slice(0, m.index).split('\n').length,
-          declaration: m[0].trim()
-        });
-      }
+      const typeName = m[1];
+      const varName  = m[2];
+
+      // Skip keywords, function names, and typedef/struct/enum declarations
+      const skip = new Set([
+        'if','else','while','for','switch','do','return','typedef',
+        'struct','enum','union','define','include','pragma','void'
+      ]);
+      if (skip.has(typeName)) continue;
+      if (fnSet.has(varName)) continue;
+      if (!varName || !typeName) continue;
+
+      globals.push({
+        name: varName,
+        type: typeName,
+        line: code.slice(0, m.index).split('\n').length,
+        declaration: m[0].trim()
+      });
     }
     return globals;
   }
