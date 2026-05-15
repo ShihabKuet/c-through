@@ -2,7 +2,7 @@
 
 > **See through your C/C++ codebase.** Source Insight-style relational function trees, call graphs, CodeLens inline metrics, and cross-file reference analysis — all inside VS Code.
 > 
-> Current Version: **1.3.0**
+> Current Version: **1.3.3**
 
 ---
 
@@ -88,7 +88,7 @@ Cross-file caller/callee relationships are fully resolved after any multi-file s
 
 ### From VSIX
 ```bash
-code --install-extension c-through-1.3.0.vsix
+code --install-extension c-through-1.3.3.vsix
 ```
 
 ---
@@ -164,6 +164,13 @@ The parser:
 
 ## Changelog
 
+### v1.3.3
+- Added **Sidebar toggle** button (`☰`) — hide/show the right panel
+- Theme and sidebar state now **persist** across panel re-opens via VS Code state
+- Clicking **Globals, Macros, and Includes** in the sidebar now jumps to their exact source line
+- Expanded global variable detection to support struct, typedef, and custom types
+- Toolbar buttons are now icon-only for a cleaner, less crowded layout
+
 ### v1.3.0
 - Added **Dark / Light mode toggle** button in the call graph toolbar
 - All UI elements switch theme instantly — background, sidebar, legend, links
@@ -193,4 +200,4 @@ The parser:
 
 ## License
 
-MIT © 2025
+MIT © 2026
