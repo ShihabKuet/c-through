@@ -7,6 +7,7 @@
  *   - Variable/struct references
  *   - Macro usage
  *   - #include dependencies
+ *   - Global variable references (read, write, address-taken, extern)
  */
 class CParser {
   constructor() {
@@ -170,6 +171,7 @@ class CParser {
     while ((m = re.exec(code)) !== null) {
       const typeName = m[1];
       const varName  = m[2];
+      const decl     = m[0].trim();
 
       // Skip keywords, function names, and typedef/struct/enum declarations
       const skip = new Set([
@@ -184,7 +186,9 @@ class CParser {
         name: varName,
         type: typeName,
         line: code.slice(0, m.index).split('\n').length,
-        declaration: m[0].trim()
+        declaration: decl,
+        isExtern: /\bextern\b/.test(decl),
+        isStatic: /\bstatic\b/.test(decl)
       });
     }
     return globals;
@@ -211,6 +215,7 @@ class CParser {
       const refs = this._extractVariableRefs(body);
       const complexity = this._cyclomaticComplexity(body);
       const isEntryPoint = this._isEntryPoint(name);
+      const globalRefs = this._extractGlobalRefs(body, lineNo);
       functions.push({
         name,
         line: lineNo,
@@ -219,12 +224,42 @@ class CParser {
         refs,
         complexity,
         isEntryPoint,
+        globalRefs,
         bodyLength: body.split('\n').length,
         isStatic: m[0].startsWith('static'),
         returnType: m[0].slice(0, m[0].indexOf(name)).trim()
       });
     }
     return functions;
+  }
+
+  /**
+   * Extract global variable name references found in a function body.
+   * Classification happens later in analysisDB once all globals are known.
+   * Stores raw line-level occurrences with enough context to classify.
+   */
+  _extractGlobalRefs(body, funcLine) {
+    const rawRefs = [];
+    const lines = body.split('\n');
+    lines.forEach((line, idx) => {
+      const absLine = funcLine + idx + 1;
+      // Detect address-taken: &identifier
+      const addrRe = /&\s*([A-Za-z_]\w*)\b/g;
+      let m;
+      while ((m = addrRe.exec(line)) !== null) {
+        rawRefs.push({ name: m[1], type: 'addr', line: absLine });
+      }
+      // Detect writes: identifier = / identifier += / identifier++ / ++identifier
+      const writeRe = /\b([A-Za-z_]\w*)\s*(?:\+\+|--|(?:[+\-*\/%&|^]=|=(?!=)))/g;
+      while ((m = writeRe.exec(line)) !== null) {
+        rawRefs.push({ name: m[1], type: 'write', line: absLine });
+      }
+      const preWriteRe = /(?:\+\+|--)\s*([A-Za-z_]\w*)\b/g;
+      while ((m = preWriteRe.exec(line)) !== null) {
+        rawRefs.push({ name: m[1], type: 'write', line: absLine });
+      }
+    });
+    return rawRefs;
   }
 
   _extractBraceBlock(code, startBrace) {
@@ -326,6 +361,19 @@ class CParser {
     // Annotate functions with their callers
     for (const fn of functions) {
       fn.callers = callers.get(fn.name) || [];
+    }
+
+    // Filter globalRefs to only include known global variable names
+    // This is done post-parse so parseFunctions() remains a single pass
+    const globalNameSet = new Set(globals.map(g => g.name));
+    const skipWords = new Set(['if','else','while','for','switch','do','return',
+      'int','char','float','double','void','NULL','true','false','sizeof']);
+    for (const fn of functions) {
+      if (fn.globalRefs) {
+        fn.globalRefs = fn.globalRefs.filter(r =>
+          globalNameSet.has(r.name) && !skipWords.has(r.name)
+        );
+      }
     }
 
     return { filePath, includes, macros, structs, globals, functions };

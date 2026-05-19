@@ -143,7 +143,7 @@ class FileItem extends vscode.TreeItem {
     // Globals section
     if (this.fileData.globals.length) {
       sections.push(new SectionItem('Global Variables', this.fileData.globals.map(g =>
-        new LeafItem(g.name, g.declaration.slice(0, 60), 'symbol-variable', g.line, this.filePath)
+        new GlobalVarItem(g, this.filePath, this.db)
       )));
     }
 
@@ -171,6 +171,98 @@ class SectionItem extends vscode.TreeItem {
     this.contextValue = 'section';
   }
   getChildren() { return this._children; }
+}
+
+class GlobalVarItem extends vscode.TreeItem {
+  constructor(g, filePath, db) {
+    super(g.name, vscode.TreeItemCollapsibleState.Collapsed);
+    this.g = g;
+    this.filePath = filePath;
+    this.db = db;
+    const tag = g.isExtern ? 'extern' : g.isStatic ? 'static' : 'global';
+    this.description = `${g.type || ''}  [${tag}]  line ${g.line}`;
+    this.tooltip = g.declaration;
+    this.iconPath = new vscode.ThemeIcon(
+      g.isExtern ? 'symbol-interface' : g.isStatic ? 'lock' : 'symbol-variable'
+    );
+    this.contextValue = 'cGlobal';
+    this.command = {
+      command: 'cThrough.jumpToFunction',
+      title: 'Go to Declaration',
+      arguments: [filePath, g.line]
+    };
+  }
+
+  getChildren() {
+    const items = [];
+    const refs = this.db.getGlobalRefs(this.g.name);
+
+    if (!refs.length) {
+      items.push(new InfoItem('No references found', 'Analyze workspace for cross-file refs', 'info'));
+      return items;
+    }
+
+    const def = this.db.getGlobalDef(this.g.name);
+    if (def) {
+      items.push(new RefItem(
+        def.isExtern ? 'Extern declared' : 'Defined',
+        path.basename(def.file),
+        def.line, def.file, 'symbol-variable'
+      ));
+    }
+
+    const externRefs = refs.filter(r => r.refType === 'extern');
+    for (const r of externRefs) {
+      items.push(new RefItem('Extern declared', path.basename(r.file), r.line, r.file, 'symbol-interface'));
+    }
+
+    const writes = refs.filter(r => r.refType === 'write');
+    if (writes.length) {
+      items.push(new SectionItem(`Written (${writes.length})`,
+        writes.map(r => new RefItem(r.func || '?', `${path.basename(r.file)}:${r.line}`, r.line, r.file, 'edit'))
+      ));
+    }
+
+    const reads = refs.filter(r => r.refType === 'read');
+    if (reads.length) {
+      items.push(new SectionItem(`Read (${reads.length})`,
+        reads.map(r => new RefItem(r.func || '?', `${path.basename(r.file)}:${r.line}`, r.line, r.file, 'eye'))
+      ));
+    }
+
+    const args = refs.filter(r => r.refType === 'arg');
+    if (args.length) {
+      items.push(new SectionItem(`Passed as arg (${args.length})`,
+        args.map(r => new RefItem(r.func || '?', `${path.basename(r.file)}:${r.line}`, r.line, r.file, 'symbol-parameter'))
+      ));
+    }
+
+    const addrs = refs.filter(r => r.refType === 'addr');
+    if (addrs.length) {
+      items.push(new SectionItem(`Address taken (${addrs.length})`,
+        addrs.map(r => new RefItem(r.func || '?', `${path.basename(r.file)}:${r.line}`, r.line, r.file, 'symbol-key'))
+      ));
+    }
+
+    return items;
+  }
+}
+
+class RefItem extends vscode.TreeItem {
+  constructor(label, description, line, filePath, icon) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.description = description || '';
+    this.iconPath = new vscode.ThemeIcon(icon || 'circle-small-filled');
+    this.tooltip = filePath ? `${filePath}:${line}` : '';
+    this.contextValue = 'cRef';
+    if (filePath && line) {
+      this.command = {
+        command: 'cThrough.jumpToFunction',
+        title: 'Go to Reference',
+        arguments: [filePath, line]
+      };
+    }
+  }
 }
 
 class FunctionDefItem extends vscode.TreeItem {
@@ -221,6 +313,20 @@ class FunctionDefItem extends vscode.TreeItem {
       items.push(new SectionItem(`Calls (${calleeItems.length})`, calleeItems));
     } else {
       items.push(new LeafItem('Calls: (none)', 'leaf function', 'info'));
+    }
+
+    // Global refs used by this function
+    const gRefs = this.fn.globalRefs || [];
+    if (gRefs.length) {
+      const gItems = gRefs.map(r => new RefItem(
+        r.name,
+        `${r.type}  line ${r.line}`,
+        r.line, this.filePath,
+        r.type === 'write' ? 'edit' :
+        r.type === 'addr'  ? 'symbol-key' :
+        r.type === 'arg'   ? 'symbol-parameter' : 'eye'
+      ));
+      items.push(new SectionItem(`Global refs (${gRefs.length})`, gItems));
     }
 
     return items;

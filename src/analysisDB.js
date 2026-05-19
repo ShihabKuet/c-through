@@ -6,20 +6,52 @@
  */
 class AnalysisDB {
   constructor() {
-    this.files = new Map();         // filePath -> ParsedFile
+    this.files = new Map();           // filePath -> ParsedFile
     this._functionIndex = new Map(); // funcName -> {file, fn}
     this._callersIndex = new Map();  // funcName -> [{caller, file, line}]
+    this._globalIndex = new Map();   // varName -> {file, line, type, isExtern, isStatic, declaration}
+    this._globalRefs  = new Map();   // varName -> [{file, func, funcLine, refType, line}]
   }
 
   clear() {
     this.files.clear();
     this._functionIndex.clear();
     this._callersIndex.clear();
+    this._globalIndex.clear();
+    this._globalRefs.clear();
   }
 
   addFile(parsedFile) {
     const { filePath, functions } = parsedFile;
     this.files.set(filePath, parsedFile);
+
+    // Index global definitions and extern declarations
+    const { globals } = parsedFile;
+    for (const g of (globals || [])) {
+      if (!this._globalIndex.has(g.name) || !g.isExtern) {
+        this._globalIndex.set(g.name, {
+          file: filePath, line: g.line, type: g.type,
+          isExtern: g.isExtern, isStatic: g.isStatic, declaration: g.declaration
+        });
+      }
+      if (g.isExtern) {
+        if (!this._globalRefs.has(g.name)) this._globalRefs.set(g.name, []);
+        const ex = this._globalRefs.get(g.name);
+        if (!ex.find(e => e.file === filePath && e.refType === 'extern'))
+          ex.push({ file: filePath, func: null, funcLine: null, refType: 'extern', line: g.line });
+      }
+    }
+
+    // Index global refs from function bodies
+    for (const fn of functions) {
+      if (!fn.globalRefs || !fn.globalRefs.length) continue;
+      for (const ref of fn.globalRefs) {
+        if (!this._globalRefs.has(ref.name)) this._globalRefs.set(ref.name, []);
+        const existing = this._globalRefs.get(ref.name);
+        if (!existing.find(e => e.file === filePath && e.func === fn.name && e.line === ref.line))
+          existing.push({ file: filePath, func: fn.name, funcLine: fn.line, refType: ref.type, line: ref.line });
+      }
+    }
 
     // Index all functions
     for (const fn of functions) {
@@ -55,6 +87,17 @@ class AnalysisDB {
         else this._callersIndex.set(callee, filtered);
       }
     }
+
+    // Clean global entries from this file
+    for (const g of (file.globals || [])) {
+      const entry = this._globalIndex.get(g.name);
+      if (entry && entry.file === filePath) this._globalIndex.delete(g.name);
+      if (this._globalRefs.has(g.name)) {
+        const filtered = this._globalRefs.get(g.name).filter(r => r.file !== filePath);
+        if (filtered.length === 0) this._globalRefs.delete(g.name);
+        else this._globalRefs.set(g.name, filtered);
+      }
+    }
     this.files.delete(filePath);
   }
 
@@ -71,6 +114,22 @@ class AnalysisDB {
     const result = [];
     for (const [name, { file, fn }] of this._functionIndex) {
       result.push({ name, file, line: fn.line });
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  getGlobalDef(varName) {
+    return this._globalIndex.get(varName) || null;
+  }
+
+  getGlobalRefs(varName) {
+    return this._globalRefs.get(varName) || [];
+  }
+
+  getAllGlobals() {
+    const result = [];
+    for (const [name, def] of this._globalIndex) {
+      result.push({ name, ...def });
     }
     return result.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -125,7 +184,8 @@ class AnalysisDB {
       files: this.files.size,
       functions: totalFunctions,
       calls: totalCalls,
-      structs: Array.from(this.files.values()).reduce((s, f) => s + f.structs.length, 0)
+      structs: Array.from(this.files.values()).reduce((s, f) => s + f.structs.length, 0),
+      globals: this._globalIndex.size
     };
   }
 }

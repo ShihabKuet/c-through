@@ -1,8 +1,18 @@
 # C Through
 
-> **See through your C/C++ codebase.** Source Insight-style relational function trees, call graphs, CodeLens inline metrics, and cross-file reference analysis — all inside VS Code.
-> 
-> Current Version: **1.3.3**
+> **See your C/C++ codebase, completely visible.**
+
+C Through brings **Source Insight-style code intelligence** into VS Code — built specifically for C and C++ developers who need more than what a standard editor provides.
+
+Large C codebases are hard to navigate. Functions call other functions across dozens of files. Global variables get written in one place and read in five others. You spend more time *chasing references* than writing code. Source Insight solved this for decades with its Relational Window — but it's a separate, aging tool that lives outside your modern workflow.
+
+**C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
+
+> Current Version: **2.0.0**
+
+---
+
+![C Through Representaion Image](https://res.cloudinary.com/dhslusvuk/image/upload/v1779184861/c_through_representaion_uhvfps.png)
 
 ---
 
@@ -79,6 +89,30 @@ Cross-file caller/callee relationships are fully resolved after any multi-file s
 
 ---
 
+### ⚡ Auto-Refresh on Save
+
+---
+
+### 🔎 Global Variable Reference Tracker
+Expand any global variable in the sidebar to see its complete usage across all files:
+
+- **Defined / Extern declared** — where it lives and where it is imported
+- **Written** — every function that assigns to it, with file and line
+- **Read** — every function that reads it, with file and line
+- **Passed as argument** — every call site where it is passed
+- **Address taken** — every `&var` usage
+
+Every entry is clickable and jumps to the exact source line.
+
+CodeLens above every global declaration shows:
+
+```c
+    🌐 global  int    ✏️ 3 writes  👁 7 reads  · 4 functions  · 2 files
+    int g_counter = 0;
+```
+
+---
+
 ## Installation
 
 ### From VS Code Marketplace
@@ -88,7 +122,7 @@ Cross-file caller/callee relationships are fully resolved after any multi-file s
 
 ### From VSIX
 ```bash
-code --install-extension c-through-1.3.3.vsix
+code --install-extension c-through-2.0.0.vsix
 ```
 
 ---
@@ -163,6 +197,13 @@ The parser:
 ---
 
 ## Changelog
+
+### v2.0.0
+- Added **Global Variable Reference Tracker** — expand any global in the sidebar to see where it is defined, written, read, passed as argument, or address-taken, across all files
+- Global variables now show `isExtern`, `isStatic`, and type info in the sidebar
+- CodeLens above global declarations shows full reference summary (writes, reads, files, functions)
+- Functions now show a **Global refs** sub-section listing which globals they access
+- Functions CodeLens gets a `🌐 globals:` lens showing accessed globals with write/read counts
 
 ### v1.3.3
 - Added **Sidebar toggle** button (`☰`) — hide/show the right panel

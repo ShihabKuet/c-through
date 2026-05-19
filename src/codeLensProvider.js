@@ -109,6 +109,75 @@ class CThroughCodeLensProvider {
           arguments: []
         }));
       }
+
+      // ── Lens 6: Global refs used by this function ─────────────────────────
+      const gRefs = fn.globalRefs || [];
+      if (gRefs.length > 0) {
+        const writes = gRefs.filter(r => r.type === 'write').length;
+        const reads  = gRefs.filter(r => r.type === 'read').length;
+        const unique = [...new Set(gRefs.map(r => r.name))];
+        const parts  = [];
+        if (writes) parts.push(`✏️ ${writes} write${writes !== 1 ? 's' : ''}`);
+        if (reads)  parts.push(`👁 ${reads} read${reads !== 1 ? 's' : ''}`);
+        lenses.push(new vscode.CodeLens(range, {
+          title: `🌐 globals: ${unique.slice(0,3).join(', ')}${unique.length > 3 ? ` +${unique.length - 3}` : ''}  ${parts.join('  ')}`,
+          tooltip: `Global variables accessed:\n${unique.map(n => {
+            const w  = gRefs.filter(r => r.name === n && r.type === 'write').length;
+            const rd = gRefs.filter(r => r.name === n && r.type === 'read').length;
+            return `  ${n}: ${w} write${w !== 1 ? 's' : ''}, ${rd} read${rd !== 1 ? 's' : ''}`;
+          }).join('\n')}`,
+          command: ''
+        }));
+      }
+    }
+
+    // ── Global variable declaration lenses ───────────────────────────────────
+    for (const g of fileData.globals) {
+      const lineIndex = Math.max(0, g.line - 1);
+      const range     = new vscode.Range(lineIndex, 0, lineIndex, 0);
+      const allRefs   = this._db.getGlobalRefs(g.name);
+      const writes    = allRefs.filter(r => r.refType === 'write');
+      const reads     = allRefs.filter(r => r.refType === 'read');
+      const externs   = allRefs.filter(r => r.refType === 'extern');
+      const args      = allRefs.filter(r => r.refType === 'arg');
+      const addrs     = allRefs.filter(r => r.refType === 'addr');
+      const tag       = g.isExtern ? '📤 extern' : g.isStatic ? '🔒 static' : '🌐 global';
+
+      lenses.push(new vscode.CodeLens(range, {
+        title: `${tag}  ${g.type || ''}`,
+        tooltip: g.declaration,
+        command: ''
+      }));
+
+      if (allRefs.length > 0) {
+        const parts = [];
+        if (writes.length)  parts.push(`✏️ ${writes.length} write${writes.length !== 1 ? 's' : ''}`);
+        if (reads.length)   parts.push(`👁 ${reads.length} read${reads.length !== 1 ? 's' : ''}`);
+        if (args.length)    parts.push(`📥 ${args.length} arg${args.length !== 1 ? 's' : ''}`);
+        if (addrs.length)   parts.push(`📌 ${addrs.length} addr`);
+        if (externs.length) parts.push(`📤 ${externs.length} extern`);
+        const uniqueFuncs = [...new Set(allRefs.filter(r => r.func).map(r => r.func))];
+        const uniqueFiles = [...new Set(allRefs.map(r => path.basename(r.file || '')))].filter(Boolean);
+        lenses.push(new vscode.CodeLens(range, {
+          title: `${parts.join('  ')}  · ${uniqueFuncs.length} function${uniqueFuncs.length !== 1 ? 's' : ''}  · ${uniqueFiles.length} file${uniqueFiles.length !== 1 ? 's' : ''}`,
+          tooltip: [
+            `Global: ${g.name}`, `Type: ${g.type || 'unknown'}`, ``,
+            writes.length  ? `Written in:  ${[...new Set(writes.map(r => r.func))].join(', ')}` : '',
+            reads.length   ? `Read in:     ${[...new Set(reads.map(r => r.func))].join(', ')}` : '',
+            args.length    ? `Passed as arg in: ${[...new Set(args.map(r => r.func))].join(', ')}` : '',
+            addrs.length   ? `Address taken in: ${[...new Set(addrs.map(r => r.func))].join(', ')}` : '',
+            externs.length ? `Extern in: ${[...new Set(externs.map(r => path.basename(r.file || '')))].join(', ')}` : '',
+          ].filter(Boolean).join('\n'),
+          command: ''
+        }));
+      } else {
+        lenses.push(new vscode.CodeLens(range, {
+          title: '⚠ no references found — run Analyze Workspace',
+          tooltip: 'Scan the workspace to find cross-file references',
+          command: 'cThrough.analyzeWorkspace',
+          arguments: []
+        }));
+      }
     }
 
     return lenses;
