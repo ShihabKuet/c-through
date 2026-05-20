@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.0.0**
+> Current Version: **2.1.0**
 
 ---
 
@@ -89,6 +89,27 @@ Cross-file caller/callee relationships are fully resolved after any multi-file s
 
 ---
 
+### 🔍 Search & Filter
+
+**Sidebar Search:**
+Filter functions and globals in the sidebar by name instantly.
+
+- Click the 🔍 icon in the C Through sidebar toolbar
+- Or `Ctrl+Shift+P` → `C Through: Search Sidebar`
+- Type any part of a function or variable name — the sidebar filters to matches only
+- Leave empty and confirm to clear the filter
+
+**Call Graph Search:**
+Search inside the visual call graph to find nodes quickly.
+
+- Type in the **Search nodes…** input box in the call graph toolbar
+- Matching nodes are highlighted at full opacity with a glow effect
+- Non-matching nodes are dimmed to 20% opacity
+- Click **✕** to clear the search
+- Search term persists across panel re-opens
+
+---
+
 ### ⚡ Auto-Refresh on Save
 
 ---
@@ -122,7 +143,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.0.0.vsix
+code --install-extension c-through-2.1.0.vsix
 ```
 
 ---
@@ -145,6 +166,7 @@ code --install-extension c-through-2.0.0.vsix
 | `C Through: Show Functions Called By This` | Open callees tree |
 | `C Through: Show Functions Calling This` | Open callers tree |
 | `C Through: Toggle CodeLens` | Show/hide inline CodeLens |
+| `C Through: Search Sidebar` | Filter sidebar functions and globals by name |
 
 ### Context Menus
 - **Editor** — right-click inside any C/C++ file for tree commands
@@ -197,6 +219,12 @@ The parser:
 ---
 
 ## Changelog
+
+### v2.1.0
+- Added **Sidebar Search** — filter functions and globals by name via toolbar button or command
+- Added **Call Graph Search** — highlight matching nodes and dim others inside the visual graph
+- Search term persists across call graph panel re-opens
+- Changed Analyze Entire Workspace icon to `$(globe)` to differentiate from search
 
 ### v2.0.0
 - Added **Global Variable Reference Tracker** — expand any global in the sidebar to see where it is defined, written, read, passed as argument, or address-taken, across all files
