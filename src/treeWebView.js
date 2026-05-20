@@ -266,6 +266,9 @@ class TreeWebView {
     <button onclick="expandAll()" title="Expand All">➕</button>
     <button onclick="collapseAll()" title="Collapse All">➖</button>
     <button id="btn-sidebar" onclick="toggleSidebar()" title="Expand/Collapse Sidebar">☰</button>
+    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <input id="search-input" type="text" placeholder="Search nodes…" oninput="onSearch(this.value)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:4px;font-size:11px;font-family:inherit;width:130px;outline:none;" title="Search and highlight matching nodes"/>
+    <button onclick="clearSearch()" title="Clear search">✕</button>
   </div>
 </div>
 <div id="main">
@@ -308,6 +311,7 @@ let layoutDir = 'topdown'; // 'topdown' | 'leftright'
 let transform = { x: 0, y: 0, scale: 1 };
 let isDragging = false, dragStart = { x: 0, y: 0 };
 let didDrag = false;
+let searchTerm = '';
 
 // ─── Collapse state ───────────────────────────────────────────────────────────
 // Key: stable string = "depth:parentName:name"
@@ -370,6 +374,18 @@ function toggleSidebar() {
   sidebar.style.display = isHidden ? 'block' : 'none';
   btn.classList.toggle('active', isHidden);
   vscode.setState({ ...(vscode.getState() || {}), sidebar: isHidden ? 'open' : 'closed' });
+}
+
+function onSearch(val) {
+  searchTerm = val.toLowerCase().trim();
+  vscode.setState({ ...(vscode.getState() || {}), search: val });
+  render();
+}
+
+function clearSearch() {
+  searchTerm = '';
+  document.getElementById('search-input').value = '';
+  render();
 }
 
 if (savedState.sidebar === 'closed') {
@@ -603,6 +619,18 @@ function render() {
       toggleNode(n.key);
     });
 
+    // Search highlight / dim
+    if (searchTerm) {
+      const matches = n.name.toLowerCase().includes(searchTerm);
+      grp.style.opacity = matches ? '1' : '0.2';
+      if (matches) {
+        circle.setAttribute('stroke-width', '3');
+        circle.setAttribute('filter', 'url(#glow)');
+      }
+    } else {
+      grp.style.opacity = '1';
+    }
+
     g.appendChild(grp);
   }
 
@@ -717,6 +745,14 @@ cc.addEventListener('wheel', e => {
 render();
 fitView();
 window.addEventListener('resize', fitView);
+
+// Restore search input if webview was re-created
+const savedSearch = (vscode.getState() || {}).search || '';
+if (savedSearch) {
+  document.getElementById('search-input').value = savedSearch;
+  searchTerm = savedSearch.toLowerCase().trim();
+  render();
+}
 </script>
 </body>
 </html>`;

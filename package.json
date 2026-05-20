@@ -3,7 +3,7 @@
   "displayName": "C Through",
   "icon": "images/icon.png",
   "description": "Relational function call tree and reference visualizer for C/C++ code",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "publisher": "ShanjidArefin",
   "license": "MIT",
   "repository": {
@@ -57,7 +57,7 @@
       {
         "command": "cThrough.analyzeWorkspace",
         "title": "C Through: Analyze Entire Workspace",
-        "icon": "$(search)"
+        "icon": "$(globe)"
       },
       {
         "command": "cThrough.analyzeDirectory",
@@ -73,6 +73,11 @@
         "command": "cThrough.toggleCodeLens",
         "title": "C Through: Toggle CodeLens",
         "icon": "$(eye)"
+      },
+      {
+        "command": "cThrough.searchSidebar",
+        "title": "C Through: Search Sidebar",
+        "icon": "$(search)"
       }
     ],
     "views": {
@@ -135,6 +140,11 @@
           "command": "cThrough.toggleCodeLens",
           "when": "view == cThroughView",
           "group": "navigation@5"
+        },
+        {
+          "command": "cThrough.searchSidebar",
+          "when": "view == cThroughView",
+          "group": "navigation@6"
         }
       ]
     },

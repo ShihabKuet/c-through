@@ -91,6 +91,21 @@ async function activate(context) {
     if (fn) webView.show(fn, 'callers');
   }));
 
+  // Search sidebar
+  context.subscriptions.push(vscode.commands.registerCommand('cThrough.searchSidebar', async () => {
+    const current = treeProvider.getFilter();
+    const input = await vscode.window.showInputBox({
+      placeHolder: 'Filter functions and globals by name…',
+      prompt: 'C Through: Type to filter sidebar. Leave empty to clear.',
+      value: current,
+    });
+    if (input === undefined) return; // user pressed Escape
+    treeProvider.setFilter(input);
+    if (input) {
+      vscode.window.showInformationMessage(`C Through: Filtering by "${input}"`);
+    }
+  }));
+
   // Toggle CodeLens on/off
   context.subscriptions.push(vscode.commands.registerCommand('cThrough.toggleCodeLens', async () => {
     const cfg = vscode.workspace.getConfiguration('cThrough');

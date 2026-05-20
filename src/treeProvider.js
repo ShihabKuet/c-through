@@ -22,7 +22,16 @@ class CTreeProvider {
   }
 
   setFilter(text) {
-    this._filter = text.toLowerCase();
+    this._filter = (text || '').toLowerCase().trim();
+    this.refresh();
+  }
+
+  getFilter() {
+    return this._filter;
+  }
+
+  clearFilter() {
+    this._filter = '';
     this.refresh();
   }
 
@@ -66,7 +75,7 @@ class CTreeProvider {
     const items = [];
     for (const [filePath, fileData] of db.files) {
       if (this._focusedFile && filePath !== this._focusedFile) continue;
-      items.push(new FileItem(filePath, fileData, db));
+      items.push(new FileItem(filePath, fileData, db, this._filter));
     }
     return items.length ? items : [new InfoItem('No files match filter', '', 'warning')];
   }
@@ -98,11 +107,12 @@ class CTreeProvider {
 // ─── Tree Items ────────────────────────────────────────────────────────────
 
 class FileItem extends vscode.TreeItem {
-  constructor(filePath, fileData, db) {
+  constructor(filePath, fileData, db, filter) {
     super(path.basename(filePath), vscode.TreeItemCollapsibleState.Expanded);
     this.filePath = filePath;
     this.fileData = fileData;
     this.db = db;
+    this.filter = filter || '';
     this.tooltip = filePath;
     this.description = `${fileData.functions.length} functions`;
     this.iconPath = new vscode.ThemeIcon('symbol-file');
@@ -140,17 +150,27 @@ class FileItem extends vscode.TreeItem {
       )));
     }
 
-    // Globals section
-    if (this.fileData.globals.length) {
-      sections.push(new SectionItem('Global Variables', this.fileData.globals.map(g =>
+    // Globals section — filtered
+    const filteredGlobals = this.filter
+      ? this.fileData.globals.filter(g => g.name.toLowerCase().includes(this.filter))
+      : this.fileData.globals;
+    if (filteredGlobals.length) {
+      sections.push(new SectionItem('Global Variables', filteredGlobals.map(g =>
         new GlobalVarItem(g, this.filePath, this.db)
       )));
     }
 
-    // Functions section
-    sections.push(new SectionItem('Functions', this.fileData.functions.map(fn =>
-      new FunctionDefItem(fn, this.filePath, this.db)
-    )));
+    // Functions section — filtered
+    const filteredFunctions = this.filter
+      ? this.fileData.functions.filter(fn => fn.name.toLowerCase().includes(this.filter))
+      : this.fileData.functions;
+    if (filteredFunctions.length) {
+      sections.push(new SectionItem('Functions', filteredFunctions.map(fn =>
+        new FunctionDefItem(fn, this.filePath, this.db)
+      )));
+    } else if (!this.filter) {
+      sections.push(new SectionItem('Functions', []));
+    }
 
     return sections;
   }
