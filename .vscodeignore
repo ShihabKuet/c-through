@@ -9,6 +9,5 @@ images/*.psd
 .eslintrc*
 .prettierrc*
 CONTRIBUTING.md
-CHANGELOG.md
 **/*.test.js
 **/*.spec.js

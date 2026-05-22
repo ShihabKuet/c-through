@@ -7,8 +7,9 @@ const AnalysisDB = require('./analysisDB');
 const CTreeProvider = require('./treeProvider');
 const TreeWebView = require('./treeWebView');
 const CThroughCodeLensProvider = require('./codeLensProvider');
+const DeadCodeReport = require('./deadCodeReport');
 
-let db, parser, treeProvider, webView, codeLensProvider;
+let db, parser, treeProvider, webView, codeLensProvider, deadCodeReport;
 let lastScanRoot = undefined;
 
 async function activate(context) {
@@ -16,6 +17,7 @@ async function activate(context) {
   db = new AnalysisDB();
   treeProvider = new CTreeProvider(db);
   webView = new TreeWebView(context, db);
+  deadCodeReport = new DeadCodeReport(context, db);
 
   // CodeLens provider
   codeLensProvider = new CThroughCodeLensProvider(db);
@@ -104,6 +106,11 @@ async function activate(context) {
     if (input) {
       vscode.window.showInformationMessage(`C Through: Filtering by "${input}"`);
     }
+  }));
+
+  // Show Dead Code Report
+  context.subscriptions.push(vscode.commands.registerCommand('cThrough.showDeadCodeReport', async () => {
+    deadCodeReport.show();
   }));
 
   // Toggle CodeLens on/off
@@ -206,6 +213,7 @@ async function runDirectoryScan(dirPath) {
     );
     treeProvider.refresh();
     codeLensProvider.refresh();
+    if (deadCodeReport) deadCodeReport.refresh();
   });
 }
 

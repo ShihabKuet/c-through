@@ -174,6 +174,138 @@ class AnalysisDB {
     return build(funcName, 0);
   }
 
+  /**
+   * Generate dead code report from current indexed data.
+   */
+  generateDeadCodeReport() {
+    const findings = [];
+
+    const isEntryPoint = name =>
+      /^(main|app_main|startup|reset_handler|hardfault_handler|.*_irqhandler|.*_isr|.*_handler|.*_task|.*_thread|test_.*|setup|loop|init|vApplicationIdleHook|vApplicationTickHook)$/i.test(name);
+
+    // ── Unused Functions ───────────────────────────────────────────────────
+    for (const [name, { file, fn }] of this._functionIndex) {
+      const callers = this._callersIndex.get(name) || [];
+      if (callers.length > 0) continue;
+      if (isEntryPoint(name)) continue;
+
+      findings.push({
+        category:   'functions',
+        name,
+        file,
+        line:       fn.line,
+        type:       fn.returnType || 'function',
+        severity:   fn.isStatic ? 'high' : 'high',
+        confidence: fn.isStatic ? 'high' : 'medium',
+        reason:     fn.isStatic
+          ? 'Static function — no local callers found'
+          : 'No callers found — may be exported via header or called via function pointer'
+      });
+    }
+
+    // ── Unused / Write-only Globals ────────────────────────────────────────
+    if (this._globalIndex) {
+      for (const [name, def] of this._globalIndex) {
+        if (def.isExtern) continue;
+        const refs   = this._globalRefs ? (this._globalRefs.get(name) || []) : [];
+        const reads  = refs.filter(r => r.refType === 'read').length;
+        const writes = refs.filter(r => r.refType === 'write').length;
+        const args   = refs.filter(r => r.refType === 'arg').length;
+        const addrs  = refs.filter(r => r.refType === 'addr').length;
+        const total  = reads + writes + args + addrs;
+
+        if (total === 0) {
+          findings.push({
+            category:   'globals',
+            name,
+            file:       def.file,
+            line:       def.line,
+            type:       def.type || 'variable',
+            severity:   def.isStatic ? 'high' : 'medium',
+            confidence: 'high',
+            reason:     'Declared but never read, written, or referenced'
+          });
+        } else if (reads === 0 && args === 0 && addrs === 0 && writes > 0) {
+          findings.push({
+            category:   'globals',
+            name,
+            file:       def.file,
+            line:       def.line,
+            type:       def.type || 'variable',
+            severity:   'medium',
+            confidence: 'high',
+            reason:     'Written ' + writes + 'x but never read — possible logic bug'
+          });
+        }
+      }
+    }
+
+    // ── Unused Macros ──────────────────────────────────────────────────────
+    // Collect all macro names referenced in function bodies (via refs array)
+    const usedMacros = new Set();
+    for (const [, file] of this.files) {
+      for (const fn of file.functions) {
+        for (const ref of (fn.refs || [])) usedMacros.add(ref);
+      }
+    }
+
+    for (const [, file] of this.files) {
+      for (const macro of (file.macros || [])) {
+        // Skip include guards
+        if (/^[A-Z_]+_H(_+)?$/.test(macro.name)) continue;
+        if (usedMacros.has(macro.name)) continue;
+        findings.push({
+          category:   'macros',
+          name:       macro.name,
+          file:       file.filePath,
+          line:       macro.line,
+          type:       macro.isFunctionLike ? 'macro (fn)' : 'macro',
+          severity:   'low',
+          confidence: 'medium',
+          reason:     'Defined but not referenced in any analyzed function body'
+        });
+      }
+    }
+
+    // ── Unresolved Externs ─────────────────────────────────────────────────
+    if (this._globalIndex) {
+      for (const [name, def] of this._globalIndex) {
+        if (!def.isExtern) continue;
+        // Check if a non-extern definition exists anywhere in the index
+        let hasDefinition = false;
+        for (const [, other] of this._globalIndex) {
+          if (other !== def && !other.isExtern) { hasDefinition = true; break; }
+        }
+        if (!hasDefinition) {
+          findings.push({
+            category:   'externs',
+            name,
+            file:       def.file,
+            line:       def.line,
+            type:       def.type || 'extern',
+            severity:   'info',
+            confidence: 'low',
+            reason:     'Extern declared but definition not found in scanned files'
+          });
+        }
+      }
+    }
+
+    // Sort: high → medium → low → info, then alphabetically
+    const order = { high:0, medium:1, low:2, info:3 };
+    findings.sort((a, b) =>
+      (order[a.severity] || 0) - (order[b.severity] || 0) ||
+      a.name.localeCompare(b.name)
+    );
+
+    return {
+      findings,
+      scannedFiles:     this.files.size,
+      scannedFunctions: this._functionIndex.size,
+      scannedGlobals:   this._globalIndex ? this._globalIndex.size : 0
+    };
+  }
+
   getStats() {
     let totalFunctions = 0, totalCalls = 0;
     for (const [, file] of this.files) {
