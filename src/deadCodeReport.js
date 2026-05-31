@@ -234,6 +234,9 @@ function renderTable() {
     return;
   }
 
+  // Store filtered array globally so onclick can access by index
+  window._findings = filtered;
+
   var html =
     '<table><thead><tr>' +
     '<th style="width:200px">Name</th>' +
@@ -249,9 +252,10 @@ function renderTable() {
     var f = filtered[i];
     var sev  = f.severity  || 'info';
     var conf = f.confidence || 'medium';
-    var fileName = (f.file || '').replace(/\\\\/g, '/').split('/').pop() || '—';
+    var fileParts = (f.file || '').split('/');
+    var fileName = fileParts[fileParts.length - 1] || '—';
     html +=
-      '<tr onclick="jumpTo(' + JSON.stringify(f.file || '') + ',' + (f.line || 0) + ')">' +
+      '<tr onclick="rowClick(' + i + ')" style="cursor:pointer">' +
       '<td><span class="name-cell">' + escHtml(f.name)     + '</span></td>' +
       '<td><span class="sev-badge sev-' + sev + '">' + sev.charAt(0).toUpperCase() + sev.slice(1) + '</span></td>' +
       '<td><span class="conf-badge">' + conf.charAt(0).toUpperCase() + conf.slice(1) + '</span></td>' +
@@ -283,11 +287,6 @@ function applyFilter(val) {
   renderTable();
 }
 
-function jumpTo(file, line) {
-  if (!file) return;
-  vscode.postMessage({ type: 'jumpTo', file: file, line: line });
-}
-
 function toggleTheme() {
   var isLight = document.documentElement.classList.toggle('light');
   var btn = document.getElementById('btn-theme');
@@ -299,6 +298,13 @@ function toggleTheme() {
 renderSummary();
 renderBadges();
 renderTable();
+
+function rowClick(idx) {
+  var f = window._findings && window._findings[idx];
+  if (!f || !f.file) return;
+  vscode.postMessage({ type: 'jumpTo', file: f.file, line: f.line || 1 });
+}
+
 var scopeEl = document.getElementById('scan-scope');
 if (scopeEl) scopeEl.textContent = '${scopeText}';
 if (${report.scannedFiles} < 2) {
