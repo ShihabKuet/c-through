@@ -2,6 +2,16 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.2.3
+- Added **Dead Code Report** panel — detects unused functions, globals, macros, and unresolved externs
+- Summary dashboard with counts by category and severity
+- Tabbed view: All / Functions / Globals / Macros / Unresolved Externs
+- Click any row jumps to exact source line
+- Filter bar to search findings by name or file
+- Re-analyze Workspace button inside the report panel
+- Dark / Light theme toggle in report panel
+- Severity and confidence ratings per finding
+
 ### v2.1.0
 - Added **Sidebar Search** — filter functions and globals by name via toolbar button or command
 - Added **Call Graph Search** — highlight matching nodes and dim others inside the visual graph

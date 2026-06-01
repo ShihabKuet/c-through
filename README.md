@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.1.0**
+> Current Version: **2.2.3**
 
 ---
 
@@ -110,6 +110,38 @@ Search inside the visual call graph to find nodes quickly.
 
 ---
 
+### ☠ Dead Code Report
+A dedicated report panel showing all dead and unused code across your entire workspace.
+
+Open via `Ctrl+Shift+P` → `C Through: Show Dead Code Report` or the ⚠ button in the sidebar toolbar.
+
+**Detects:**
+- **Unused Functions** — zero callers, with severity and confidence rating
+- **Unused Globals** — declared but never referenced, or written but never read
+- **Unused Macros** — defined but never referenced in any function body
+- **Unresolved Externs** — extern declarations with no definition found in scanned files
+
+**Panel features:**
+- Summary dashboard with counts by category and severity
+- Tabs: All / Functions / Globals / Macros / Unresolved Externs
+- Filter bar to search findings by name or file
+- Click any row to jump directly to that source line
+- ⟳ Analyze Workspace button to re-scan and refresh the report
+- Dark / Light theme toggle
+
+**Severity levels:**
+
+| Level | Meaning |
+|---|---|
+| 🔴 High | Static function with no callers, or global never referenced |
+| 🟡 Medium | Non-static function with no callers, or write-only global |
+| 🟢 Low | Unused macro |
+| ⚪ Info | Unresolved extern declaration |
+
+> **Note:** Always run **Analyze Entire Workspace** before opening the report for accurate cross-file results.
+
+---
+
 ### ⚡ Auto-Refresh on Save
 
 ---
@@ -143,7 +175,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.1.0.vsix
+code --install-extension c-through-2.2.3.vsix
 ```
 
 ---
@@ -167,6 +199,7 @@ code --install-extension c-through-2.1.0.vsix
 | `C Through: Show Functions Calling This` | Open callers tree |
 | `C Through: Toggle CodeLens` | Show/hide inline CodeLens |
 | `C Through: Search Sidebar` | Filter sidebar functions and globals by name |
+| `C Through: Show Dead Code Report` | Open the dead code analysis report panel |
 
 ### Context Menus
 - **Editor** — right-click inside any C/C++ file for tree commands
