@@ -2,7 +2,7 @@
 
 All notable changes to the "C Through" extension are documented here.
 
-### v2.2.3
+### v2.2.4
 - Added **Dead Code Report** panel — detects unused functions, globals, macros, and unresolved externs
 - Summary dashboard with counts by category and severity
 - Tabbed view: All / Functions / Globals / Macros / Unresolved Externs
