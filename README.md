@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.2.4**
+> Current Version: **2.2.6**
 
 ---
 
@@ -175,7 +175,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.2.4.vsix
+code --install-extension c-through-2.2.6.vsix
 ```
 
 ---
