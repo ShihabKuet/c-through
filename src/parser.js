@@ -201,7 +201,7 @@ class CParser {
     const functions = [];
     // Match: [return_type] function_name([params]) {
     // Handles: static, inline, extern, pointer returns, etc.
-    const headerRe = /^(?:(?:static|inline|extern|const|volatile|__attribute__\s*\([^)]+\))\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:(?:struct|union|enum)\s+)?\w+\s*\*?\s*(\w+)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)\s*(?:__attribute__\s*\([^)]+\)\s*)?\{/gm;
+    const headerRe = /^(?:[A-Z_][A-Z0-9_]*\s+)?(?:(?:static|inline|extern|const|volatile|__attribute__\s*\([^)]+\))\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:(?:struct|union|enum)\s+)?\w+\s*\*?\s*(\w+)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)\s*(?:__attribute__\s*\([^)]+\)\s*)?\{/gm;
     let m;
     while ((m = headerRe.exec(cleanCode)) !== null) {
       const name = m[1];
