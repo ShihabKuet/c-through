@@ -32,7 +32,13 @@ class TreeWebView {
 
     const stats = this._db.getStats();
     this._panel.title = `Tree: ${funcName}`;
-    this._panel.webview.html = this._buildHtml(tree, funcName, mode, stats);
+
+    // Convert local icon path to webview-safe URI
+    const iconUri = this._panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._context.extensionUri, 'images', 'icon.png')
+    );
+
+    this._panel.webview.html = this._buildHtml(tree, funcName, mode, stats, iconUri);
   }
 
   _handleMessage(msg) {
@@ -55,7 +61,7 @@ class TreeWebView {
     }
   }
 
-  _buildHtml(tree, rootFunc, mode, stats) {
+  _buildHtml(tree, rootFunc, mode, stats, iconUri) {
     const treeJson = JSON.stringify(tree);
     return `<!DOCTYPE html>
 <html lang="en">
@@ -115,6 +121,7 @@ class TreeWebView {
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
   #header h1 { font-size: 14px; color: var(--accent); }
   #header .badge {
@@ -125,10 +132,34 @@ class TreeWebView {
     font-size: 11px;
     color: var(--text2);
   }
+  .header-branding {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .header-branding img {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    object-fit: contain;
+  }
+  .header-branding .dev-credit {
+    font-size: 10px;
+    color: var(--text2);
+    letter-spacing: 0.02em;
+  }  
   #toolbar {
     display: flex;
     gap: 6px;
     margin-left: auto;
+    flex-wrap: wrap;
+  }
+  .toolbar-sep {
+    width: 1px;
+    background: var(--border);
+    align-self: stretch;
+    margin: 0 2px;
   }
   button {
     background: var(--bg3);
@@ -256,19 +287,23 @@ class TreeWebView {
   <div id="toolbar">
     <button id="btn-callees" onclick="switchMode('callees')" title="▼ Callees">▼</button>
     <button id="btn-callers" onclick="switchMode('callers')" title="▲ Callers">▲</button>
-    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <div class="toolbar-sep"></div>
     <button id="btn-layout-td" onclick="setLayout('topdown')" class="active" title="Top→Down: Tree grows top to bottom">⬇</button>
     <button id="btn-layout-lr" onclick="setLayout('leftright')" title="Left→Right: Tree grows left to right">➡</button>
-    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <div class="toolbar-sep"></div>
     <button id="btn-theme" onclick="toggleTheme()" title="Mode: Toggle light/dark mode">☀</button>
-    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <div class="toolbar-sep"></div>
     <button onclick="resetView()" title="Reset View">⟳</button>
     <button onclick="expandAll()" title="Expand All">➕</button>
     <button onclick="collapseAll()" title="Collapse All">➖</button>
     <button id="btn-sidebar" onclick="toggleSidebar()" title="Expand/Collapse Sidebar">☰</button>
-    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 2px"></span>
+    <div class="toolbar-sep"></div>
     <input id="search-input" type="text" placeholder="Search nodes…" oninput="onSearch(this.value)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:4px;font-size:11px;font-family:inherit;width:130px;outline:none;" title="Search and highlight matching nodes"/>
     <button onclick="clearSearch()" title="Clear search">✕</button>
+  </div>
+  <div class="header-branding">
+    <img src="${iconUri}" alt="C Through" title="C Through"/>
+    <span class="dev-credit">Developed by SHANJID</span>
   </div>
 </div>
 <div id="main">
