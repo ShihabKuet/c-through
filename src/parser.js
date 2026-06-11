@@ -102,7 +102,7 @@ class CParser {
     while ((m = re.exec(code)) !== null) {
       macros.push({
         name: m[1],
-        params: m[2] ? m[2].split(',').map(p => p.trim()) : null,
+        params: m[2] !== undefined ? m[2].split(',').map(p => p.trim()) : null,
         body: m[3] ? m[3].trim() : '',
         line: code.slice(0, m.index).split('\n').length,
         isFunctionLike: m[2] !== undefined

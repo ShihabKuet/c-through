@@ -141,7 +141,7 @@ class FileItem extends vscode.TreeItem {
     const valMacros = this.fileData.macros.filter(m => !m.isFunctionLike);
     if (fnMacros.length) {
       sections.push(new SectionItem('Function Macros', fnMacros.map(m =>
-        new LeafItem(`${m.name}(${m.params.join(', ')})`, m.body.slice(0, 40), 'symbol-misc', m.line, this.filePath)
+        new LeafItem(`${m.name}(${(m.params || []).join(', ')})`, m.body.slice(0, 40), 'symbol-misc', m.line, this.filePath)
       )));
     }
     if (valMacros.length) {
