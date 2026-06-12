@@ -303,7 +303,7 @@ class TreeWebView {
   </div>
   <div class="header-branding">
     <img src="${iconUri}" alt="C Through" title="C Through"/>
-    <span class="dev-credit">Developed by SHANJID</span>
+    <span class="dev-credit">Developed by SHANJID.BD</span>
   </div>
 </div>
 <div id="main">

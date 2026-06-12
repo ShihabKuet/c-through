@@ -2,6 +2,12 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.2.9
+- Fixed crash when rendering function-like macros with empty parameters — `#define FOO()` no longer causes `.join()` on null crash in the sidebar
+- Fixed function detection for signatures prefixed with uppercase macros — `PAM_EXTERN`, `EXPORT`, `API_FUNC` and similar patterns are now correctly parsed
+- Call graph toolbar buttons now wrap responsively when the panel is narrow — no more hidden or overflowing buttons
+
+
 ### v2.2.6
 - Official Icon Change
 
