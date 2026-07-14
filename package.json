@@ -165,6 +165,13 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "cThrough.searchSidebar",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
+      }
+    ],
     "configuration": {
       "title": "C Through",
       "properties": {

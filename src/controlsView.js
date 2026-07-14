@@ -10,6 +10,7 @@ class ControlsViewProvider {
   constructor(treeProvider) {
     this._tree = treeProvider;
     this._view = null;
+    this._pendingFocus = false;
   }
 
   static get viewType() { return 'cThroughControls'; }
@@ -24,6 +25,11 @@ class ControlsViewProvider {
       switch (msg.type) {
         case 'ready':
           this._postState();
+          // Honor a focus requested before the webview finished loading
+          if (this._pendingFocus) {
+            this._pendingFocus = false;
+            webviewView.webview.postMessage({ type: 'focus' });
+          }
           break;
         case 'search':
           this._tree.setFilter(msg.value || '');
@@ -44,6 +50,9 @@ class ControlsViewProvider {
     if (this._view) {
       this._view.show?.(true);
       this._view.webview.postMessage({ type: 'focus' });
+    } else {
+      // View not resolved yet — focus once it finishes loading (see 'ready')
+      this._pendingFocus = true;
     }
   }
 
