@@ -163,35 +163,77 @@ class CParser {
     const globals = [];
     const fnSet = new Set(functionNames);
 
-    // Match any file-scope variable declaration:
-    // optional qualifiers + any type identifier + optional pointer + name + optional array + optional init + semicolon
-    const re = /^(?:(?:static|extern|const|volatile)\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:struct\s+|enum\s+|union\s+)?([A-Za-z_]\w*)\s*\*?\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\])*\s*(?:=\s*[^;]+)?;/gm;
+    // Match any file-scope variable declaration statement:
+    // optional qualifiers + any type identifier + a comma-separated declarator list + semicolon.
+    // The declarator list (group 2) is split afterwards so that multi-variable
+    // declarations like `uint8_t a[100], b[100];` yield one global per name.
+    const re = /^(?:(?:static|extern|const|volatile)\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:struct\s+|enum\s+|union\s+)?([A-Za-z_]\w*)\s+([^;\n]*?)\s*;/gm;
+
+    // Skip keywords, function names, and typedef/struct/enum declarations
+    const skip = new Set([
+      'if','else','while','for','switch','do','return','typedef',
+      'struct','enum','union','define','include','pragma','void'
+    ]);
 
     let m;
     while ((m = re.exec(code)) !== null) {
-      const typeName = m[1];
-      const varName  = m[2];
-      const decl     = m[0].trim();
+      const typeName    = m[1];
+      const declarators = m[2];
+      const decl        = m[0].trim();
 
-      // Skip keywords, function names, and typedef/struct/enum declarations
-      const skip = new Set([
-        'if','else','while','for','switch','do','return','typedef',
-        'struct','enum','union','define','include','pragma','void'
-      ]);
       if (skip.has(typeName)) continue;
-      if (fnSet.has(varName)) continue;
-      if (!varName || !typeName) continue;
+      if (!typeName || !declarators) continue;
+      // A declarator list containing a '(' at top level is a function prototype
+      // or function pointer, not a plain variable — skip to avoid false matches.
+      if (/\(/.test(declarators) && !/\[/.test(declarators)) continue;
+      // A '{' before any initializer means this is a struct/union/enum body
+      // (e.g. single-line `struct s { int a; };`), not a variable declaration.
+      if (/\{/.test(declarators.split('=')[0])) continue;
 
-      globals.push({
-        name: varName,
-        type: typeName,
-        line: code.slice(0, m.index).split('\n').length,
-        declaration: decl,
-        isExtern: /\bextern\b/.test(decl),
-        isStatic: /\bstatic\b/.test(decl)
-      });
+      const line     = code.slice(0, m.index).split('\n').length;
+      const isExtern = /\bextern\b/.test(decl);
+      const isStatic = /\bstatic\b/.test(decl);
+
+      for (const token of this._splitDeclarators(declarators)) {
+        // Strip pointer stars, array subscripts and initializers to get the name
+        const nameMatch = token.replace(/=[\s\S]*$/, '').match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])*\s*$/);
+        const varName = nameMatch ? nameMatch[1] : null;
+        if (!varName) continue;
+        if (fnSet.has(varName)) continue;
+        if (skip.has(varName)) continue;
+
+        globals.push({
+          name: varName,
+          type: typeName,
+          line,
+          declaration: decl,
+          isExtern,
+          isStatic
+        });
+      }
     }
     return globals;
+  }
+
+  /**
+   * Split a declarator list on top-level commas, ignoring commas nested inside
+   * brackets, braces or parentheses (e.g. array/struct initializers).
+   */
+  _splitDeclarators(list) {
+    const tokens = [];
+    let depth = 0, current = '';
+    for (const ch of list) {
+      if (ch === '[' || ch === '{' || ch === '(') depth++;
+      else if (ch === ']' || ch === '}' || ch === ')') depth--;
+      if (ch === ',' && depth === 0) {
+        tokens.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) tokens.push(current);
+    return tokens.map(t => t.trim()).filter(Boolean);
   }
 
   /**
@@ -241,22 +283,63 @@ class CParser {
   _extractGlobalRefs(body, funcLine) {
     const rawRefs = [];
     const lines = body.split('\n');
+    // Keywords that look like identifiers but are never variable references.
+    const kw = new Set([
+      'if','else','while','for','switch','do','return','sizeof','typeof',
+      'case','default','goto','break','continue','const','static','volatile',
+      'unsigned','signed','void','int','char','float','double','long','short',
+      'struct','union','enum','NULL','true','false'
+    ]);
     lines.forEach((line, idx) => {
       const absLine = funcLine + idx + 1;
+      // Character positions already claimed by a write/addr occurrence, so the
+      // read pass below does not double-count the same identifier occurrence.
+      const claimed = new Set();
+      let m;
+
       // Detect address-taken: &identifier
       const addrRe = /&\s*([A-Za-z_]\w*)\b/g;
-      let m;
       while ((m = addrRe.exec(line)) !== null) {
+        const start = m.index + m[0].indexOf(m[1]);
         rawRefs.push({ name: m[1], type: 'addr', line: absLine });
+        claimed.add(start);
       }
-      // Detect writes: identifier = / identifier += / identifier++ / ++identifier
+      // Detect writes: identifier = / identifier += / identifier++ / --identifier
       const writeRe = /\b([A-Za-z_]\w*)\s*(?:\+\+|--|(?:[+\-*\/%&|^]=|=(?!=)))/g;
       while ((m = writeRe.exec(line)) !== null) {
         rawRefs.push({ name: m[1], type: 'write', line: absLine });
+        claimed.add(m.index);
+      }
+      // Detect writes through a subscript/member lvalue chain, e.g.
+      //   arr[i] = ...      students[6].age = ...      obj.field = ...
+      //   p->next->val = ...   arr[i]++
+      // The base identifier is the write target; without this it would be
+      // mis-counted as a read by the pass below.
+      const subWriteRe = /\b([A-Za-z_]\w*)\s*(?:\[[^\]]*\]|\.\w+|->\w+)+\s*(?:\+\+|--|<<=|>>=|[+\-*\/%&|^]=|=(?!=))/g;
+      while ((m = subWriteRe.exec(line)) !== null) {
+        rawRefs.push({ name: m[1], type: 'write', line: absLine });
+        claimed.add(m.index);
       }
       const preWriteRe = /(?:\+\+|--)\s*([A-Za-z_]\w*)\b/g;
       while ((m = preWriteRe.exec(line)) !== null) {
+        const start = m.index + m[0].indexOf(m[1]);
         rawRefs.push({ name: m[1], type: 'write', line: absLine });
+        claimed.add(start);
+      }
+      // Detect reads/compares: any remaining identifier that is not a write
+      // target, not a member access (a.b / a->b), and not a function call.
+      // Non-global names are filtered out later against the known-globals set.
+      const idRe = /([A-Za-z_]\w*)/g;
+      while ((m = idRe.exec(line)) !== null) {
+        const name = m[1];
+        const start = m.index;
+        if (claimed.has(start)) continue;
+        if (kw.has(name)) continue;
+        // Skip member fields: preceded by '.' or '->'
+        if (/(?:\.|->)\s*$/.test(line.slice(0, start))) continue;
+        // Skip function calls: immediately followed by '('
+        if (/^\s*\(/.test(line.slice(start + name.length))) continue;
+        rawRefs.push({ name, type: 'read', line: absLine });
       }
     });
     return rawRefs;

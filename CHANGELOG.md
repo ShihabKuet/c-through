@@ -2,6 +2,12 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.2.10
+- Multi-variable and array declarations on a single line are now fully parsed — `STUDENT new_students[10], old_students[10];` and `uint8_t old_student_n, new_student_n;` now list every variable instead of only the first
+- **Global refs** now track reads/compares, not just writes — globals used in conditions, expressions, or as right-hand values (e.g. `if (new_student_n <= old_student_n)`) now appear in the sidebar and CodeLens
+- Subscripted and struct-member writes are correctly classified as writes — `arr[i] = x`, `new_students[6].age = 20`, and `p->next->val = ...` now count the base global as written rather than read
+- Single-line `struct`/`union`/`enum` definitions no longer leak their fields as bogus globals
+
 ### v2.2.9
 - Fixed crash when rendering function-like macros with empty parameters — `#define FOO()` no longer causes `.join()` on null crash in the sidebar
 - Fixed function detection for signatures prefixed with uppercase macros — `PAM_EXTERN`, `EXPORT`, `API_FUNC` and similar patterns are now correctly parsed
