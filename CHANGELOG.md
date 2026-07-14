@@ -2,6 +2,10 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.2.11
+- Fixed function names truncated to a single letter when the return type has no plain base token — `static unsigned long show_redirect(...)` now shows as `show_redirect` instead of `t`
+- Applies to return types built entirely from qualifier keywords (`unsigned long`, `long`, `short`) and to uppercase `typedef`/macro types (`ULONG`, `INT32`, `BOOL`), including pointer returns (`ULONG *foo(...)`) and multi-line signatures
+
 ### v2.2.10
 - Multi-variable and array declarations on a single line are now fully parsed — `STUDENT new_students[10], old_students[10];` and `uint8_t old_student_n, new_student_n;` now list every variable instead of only the first
 - **Global refs** now track reads/compares, not just writes — globals used in conditions, expressions, or as right-hand values (e.g. `if (new_student_n <= old_student_n)`) now appear in the sidebar and CodeLens

@@ -243,7 +243,12 @@ class CParser {
     const functions = [];
     // Match: [return_type] function_name([params]) {
     // Handles: static, inline, extern, pointer returns, etc.
-    const headerRe = /^(?:[A-Z_][A-Z0-9_]*\s+)?(?:(?:static|inline|extern|const|volatile|__attribute__\s*\([^)]+\))\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:(?:struct|union|enum)\s+)?\w+\s*\*?\s*(\w+)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)\s*(?:__attribute__\s*\([^)]+\)\s*)?\{/gm;
+    // The return-type base token is optional: types made entirely of qualifier
+    // keywords (e.g. `unsigned long`, `long`, `short`) leave no base word, so
+    // requiring one would steal the function name. When present it must be
+    // separated from the name by whitespace or a pointer star, so a bare
+    // identifier like `show_redirect` is never split.
+    const headerRe = /^(?:[A-Z_][A-Z0-9_]*\s+)?(?:(?:static|inline|extern|const|volatile|__attribute__\s*\([^)]+\))\s+)*(?:(?:unsigned|signed|long|short|const)\s+)*(?:(?:struct|union|enum)\s+)?(?:\w+\s*\*+\s*|\w+\s+)?(\w+)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)\s*(?:__attribute__\s*\([^)]+\)\s*)?\{/gm;
     let m;
     while ((m = headerRe.exec(cleanCode)) !== null) {
       const name = m[1];
