@@ -2,6 +2,10 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.3.2
+- **Cursor sync** — moving the editor cursor to a function or global variable now selects and reveals that symbol in the C Through sidebar. Placing the cursor on a call site reveals the called function's definition; anywhere else selects the enclosing function
+- Sync highlights the symbol without stealing focus from the editor, and can be toggled off with the new `cThrough.syncCursor` setting
+
 ### v2.3.1
 - **Embedded Search & Filter panel** — added a "C Through: Search & Filter" panel above the sidebar tree with a live search box (replacing the old pop-up input) that filters Includes, Structs, Macros, Globals, and Functions by name
 - **Category filter checkboxes** — toggle visibility of Includes / Structs / Macros / Globals / Functions sections directly from the panel, with Select all / Clear all shortcuts

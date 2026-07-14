@@ -24,10 +24,38 @@ class CTreeProvider {
       globals:  true,
       functions: true
     };
+    // Cache of the current root items (file view) so element identity is stable
+    // across getChildren calls — required for TreeView.reveal() / getParent().
+    this._rootCache = null;
+    this._fileItemByPath = new Map();
   }
 
   refresh() {
+    this._rootCache = null;
+    this._fileItemByPath.clear();
     this._onDidChangeTreeData.fire();
+  }
+
+  getParent(element) {
+    return (element && element.parent) || null;
+  }
+
+  /**
+   * Locate the tree item for a symbol so the editor cursor can reveal it.
+   * kind: 'function' | 'global'. Returns the item instance or null.
+   */
+  findSymbolItem(filePath, kind, name) {
+    // Ensure root/file items exist (populates the cache) in file view only.
+    if (this._mode !== 'file') return null;
+    if (!this._rootCache) this._getRootChildren();
+    const fileItem = this._fileItemByPath.get(filePath);
+    if (!fileItem) return null;
+    const sectionLabel = kind === 'global' ? 'Global Variables' : 'Functions';
+    const section = fileItem.getChildren().find(s => s.label === sectionLabel);
+    if (!section) return null;
+    return section.getChildren().find(i =>
+      (kind === 'global' ? (i.g && i.g.name) : (i.fn && i.fn.name)) === name
+    ) || null;
   }
 
   setFilter(text) {
@@ -91,13 +119,19 @@ class CTreeProvider {
       return this._getCalleesTree(this._focusedFunction);
     }
 
-    // Default: file view
+    // Default: file view (cached so element identity stays stable for reveal)
+    if (this._rootCache) return this._rootCache;
     const items = [];
+    this._fileItemByPath.clear();
     for (const [filePath, fileData] of db.files) {
       if (this._focusedFile && filePath !== this._focusedFile) continue;
-      items.push(new FileItem(filePath, fileData, db, this._filter, this._categories));
+      const fileItem = new FileItem(filePath, fileData, db, this._filter, this._categories);
+      fileItem.parent = null;
+      this._fileItemByPath.set(filePath, fileItem);
+      items.push(fileItem);
     }
-    return items.length ? items : [new InfoItem('No files match filter', '', 'warning')];
+    this._rootCache = items.length ? items : [new InfoItem('No files match filter', '', 'warning')];
+    return this._rootCache;
   }
 
   _getCallersTree(funcName, depth = 0, visited = new Set()) {
@@ -141,6 +175,7 @@ class FileItem extends vscode.TreeItem {
   }
 
   getChildren() {
+    if (this._sectionsCache) return this._sectionsCache;
     const sections = [];
     const cat = this.categories;
     const f = this.filter;
@@ -204,6 +239,8 @@ class FileItem extends vscode.TreeItem {
       }
     }
 
+    for (const s of sections) s.parent = this;
+    this._sectionsCache = sections;
     return sections;
   }
 }
@@ -212,6 +249,7 @@ class SectionItem extends vscode.TreeItem {
   constructor(label, children) {
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     this._children = children;
+    for (const c of children) c.parent = this;
     this.description = `(${children.length})`;
     this.iconPath = new vscode.ThemeIcon(
       label === 'Functions' ? 'symbol-function' :

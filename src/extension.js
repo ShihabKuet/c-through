@@ -150,6 +150,49 @@ async function activate(context) {
     treeProvider.showFileView(editor.document.fileName);
   }));
 
+  // Sync sidebar selection with the editor cursor
+  let syncTimer;
+  let lastRevealed = '';
+  const revealSymbolAtCursor = (editor) => {
+    const filePath = editor.document.fileName;
+    const fileData = db.files.get(filePath);
+    if (!fileData) return;
+    const pos = editor.selection.active;
+    const wordRange = editor.document.getWordRangeAtPosition(pos);
+    const word = wordRange ? editor.document.getText(wordRange) : '';
+
+    let target = null;
+    // Prefer the symbol under the cursor if it is defined in this file
+    if (word) {
+      if (fileData.globals.some(g => g.name === word)) target = { kind: 'global', name: word };
+      else if (fileData.functions.some(f => f.name === word)) target = { kind: 'function', name: word };
+    }
+    // Otherwise select the function whose body encloses the cursor line
+    if (!target) {
+      const line = pos.line + 1;
+      const enc = fileData.functions.find(f => line >= f.line && line <= f.line + (f.bodyLength || 0));
+      if (enc) target = { kind: 'function', name: enc.name };
+    }
+    if (!target) return;
+
+    const key = `${filePath}|${target.kind}|${target.name}`;
+    if (key === lastRevealed) return;
+    const item = treeProvider.findSymbolItem(filePath, target.kind, target.name);
+    if (item) {
+      lastRevealed = key;
+      treeView.reveal(item, { select: true, focus: false }).then(undefined, () => {});
+    }
+  };
+  context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(e => {
+    if (!vscode.workspace.getConfiguration('cThrough').get('syncCursor', true)) return;
+    const editor = e.textEditor;
+    if (!editor || editor !== vscode.window.activeTextEditor) return;
+    if (!isCFile(editor.document.languageId)) return;
+    if (!treeView.visible) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => revealSymbolAtCursor(editor), 120);
+  }));
+
   // Analyze active file on startup
   const active = vscode.window.activeTextEditor;
   if (active && isCFile(active.document.languageId)) {

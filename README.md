@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.3.1**
+> Current Version: **2.3.2**
 
 ---
 
@@ -108,6 +108,14 @@ Search inside the visual call graph to find nodes quickly.
 - Click **✕** to clear the search
 - Search term persists across panel re-opens
 
+**Cursor Sync:**
+Keep the sidebar in step with where you are in the code.
+
+- Move the editor cursor to a function or global variable — the C Through tree selects and reveals that symbol
+- Placing the cursor on a call site reveals the called function's definition; elsewhere it selects the enclosing function
+- Highlights without stealing focus from the editor
+- Toggle off with the `cThrough.syncCursor` setting
+
 ---
 
 ### ☠ Dead Code Report
@@ -175,7 +183,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.3.1.vsix
+code --install-extension c-through-2.3.2.vsix
 ```
 
 ---

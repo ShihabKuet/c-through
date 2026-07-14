@@ -3,7 +3,7 @@
   "displayName": "C Through",
   "icon": "images/icon.png",
   "description": "Relational function call tree and reference visualizer for C/C++ code",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "publisher": "ShanjidArefin",
   "license": "MIT",
   "repository": {
@@ -197,6 +197,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show inline CodeLens above every C/C++ function (callers, calls, complexity, dead code warnings)."
+        },
+        "cThrough.syncCursor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Sync the sidebar selection with the editor cursor — selecting a function or global in code highlights it in the C Through tree."
         },
         "cThrough.maxLinesPerFile": {
           "type": "number",
