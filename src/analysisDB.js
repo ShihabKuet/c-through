@@ -11,6 +11,8 @@ class AnalysisDB {
     this._callersIndex = new Map();  // funcName -> [{caller, file, line}]
     this._globalIndex = new Map();   // varName -> {file, line, type, isExtern, isStatic, declaration}
     this._globalRefs  = new Map();   // varName -> [{file, func, funcLine, refType, line}]
+    this._funcRefs    = new Map();   // funcName -> [{file, line}] indirect (pointer) refs
+    this._funcRefsDirty = true;      // rebuild _funcRefs lazily after files change
   }
 
   clear() {
@@ -19,11 +21,14 @@ class AnalysisDB {
     this._callersIndex.clear();
     this._globalIndex.clear();
     this._globalRefs.clear();
+    this._funcRefs.clear();
+    this._funcRefsDirty = true;
   }
 
   addFile(parsedFile) {
     const { filePath, functions } = parsedFile;
     this.files.set(filePath, parsedFile);
+    this._funcRefsDirty = true;
 
     // Index global definitions and extern declarations
     const { globals } = parsedFile;
@@ -99,6 +104,39 @@ class AnalysisDB {
       }
     }
     this.files.delete(filePath);
+    this._funcRefsDirty = true;
+  }
+
+  /**
+   * Rebuild the indirect function-reference index from every file's raw
+   * candidates, keeping only names that resolve to a known function. A
+   * reference on the function's own definition line is ignored.
+   */
+  _buildFuncRefs() {
+    const map = new Map();
+    for (const [filePath, file] of this.files) {
+      for (const ref of (file.funcRefs || [])) {
+        const def = this._functionIndex.get(ref.name);
+        if (!def) continue; // only real functions
+        if (def.file === filePath && def.fn.line === ref.line) continue; // own def line
+        if (!map.has(ref.name)) map.set(ref.name, []);
+        const arr = map.get(ref.name);
+        if (!arr.find(e => e.file === filePath && e.line === ref.line))
+          arr.push({ file: filePath, line: ref.line });
+      }
+    }
+    this._funcRefs = map;
+    this._funcRefsDirty = false;
+  }
+
+  /**
+   * Indirect (function-pointer) references to a function — command tables,
+   * task/thread entry points, callback registrations. Distinct from callers:
+   * these are references, not resolved call edges.
+   */
+  getFunctionRefs(funcName) {
+    if (this._funcRefsDirty) this._buildFuncRefs();
+    return this._funcRefs.get(funcName) || [];
   }
 
   getFunction(name) {
@@ -188,6 +226,8 @@ class AnalysisDB {
       const callers = this._callersIndex.get(name) || [];
       if (callers.length > 0) continue;
       if (isEntryPoint(name)) continue;
+      // Referenced by pointer (command table, thread entry, callback) — not dead
+      if (this.getFunctionRefs(name).length > 0) continue;
 
       findings.push({
         category:   'functions',

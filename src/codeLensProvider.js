@@ -43,21 +43,25 @@ class CThroughCodeLensProvider {
       const range = new vscode.Range(lineIndex, 0, lineIndex, 0);
 
       const callers  = this._db.getCallers(fn.name);
+      const funcRefs = this._db.getFunctionRefs(fn.name);
       const callees  = fn.calls.filter(c => !c.isStdLib);
       const allCallees = fn.calls; // including stdlib for complexity
       const complexity = fn.complexity || 1;
-      const isDead   = callers.length === 0 && !fn.isEntryPoint;
+      // Referenced by pointer (command table / thread entry / callback) is not dead
+      const isDead   = callers.length === 0 && funcRefs.length === 0 && !fn.isEntryPoint;
 
       // ── Lens 1: Callers ──────────────────────────────────────────────────
       const callerLabel = callers.length === 0
-        ? (isDead ? '💀 0 callers' : '⊙ root')
+        ? (funcRefs.length ? `⊙ referenced ${funcRefs.length}×` : (isDead ? '💀 0 callers' : '⊙ root'))
         : `↑ ${callers.length} caller${callers.length !== 1 ? 's' : ''}`;
 
       lenses.push(new vscode.CodeLens(range, {
         title: callerLabel,
         tooltip: callers.length
           ? `Called by: ${callers.slice(0, 5).map(c => c.caller).join(', ')}${callers.length > 5 ? ` +${callers.length - 5} more` : ''}`
-          : isDead ? 'No callers found — possible dead code' : 'Root function (entry point)',
+          : funcRefs.length
+            ? `No direct callers — referenced via pointer at ${funcRefs.slice(0, 5).map(r => `${path.basename(r.file)}:${r.line}`).join(', ')}`
+            : isDead ? 'No callers found — possible dead code' : 'Root function (entry point)',
         command: callers.length ? 'cThrough.showCallers' : '',
         arguments: [fn.name]
       }));

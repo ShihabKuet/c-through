@@ -316,10 +316,22 @@ class FunctionDefItem extends vscode.TreeItem {
       const callerFn = this.db.getFunction(c.caller);
       return new FunctionRefItem(c.caller, callerFn?.file || this.filePath, callerFn?.line || 0, 'caller', c.count);
     });
+    // Indirect references (command tables, thread entry, callbacks)
+    const funcRefs = this.db.getFunctionRefs(this.fn.name);
     if (callerItems.length) {
       items.push(new SectionItem(`Called by (${callerItems.length})`, callerItems));
+    } else if (funcRefs.length) {
+      items.push(new LeafItem('Called by: (none)', 'referenced via pointer', 'info'));
     } else {
       items.push(new LeafItem('Called by: (none)', 'root function', 'info'));
+    }
+    if (funcRefs.length) {
+      const refItems = funcRefs.map(r => new RefItem(
+        path.basename(r.file),
+        `referenced  line ${r.line}`,
+        r.line, r.file, 'references'
+      ));
+      items.push(new SectionItem(`Referenced (${refItems.length})`, refItems));
     }
 
     // Callees

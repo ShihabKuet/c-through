@@ -237,6 +237,24 @@ class CParser {
   }
 
   /**
+   * Given a line and the index just past a call's opening '(', return the first
+   * argument's text and the index it starts at. Stops at the first top-level
+   * comma or the matching ')'. Returns null if the argument list is empty.
+   */
+  _firstArg(line, openIdx) {
+    let depth = 0, arg = '';
+    let i = openIdx;
+    for (; i < line.length; i++) {
+      const c = line[i];
+      if (c === '(' || c === '[' || c === '{') depth++;
+      else if (c === ')' || c === ']' || c === '}') { if (depth === 0) break; depth--; }
+      else if (c === ',' && depth === 0) break;
+      arg += c;
+    }
+    return arg.trim() ? { arg, start: openIdx } : null;
+  }
+
+  /**
    * Extract all function definitions with their bodies
    */
   parseFunctions(cleanCode, originalCode) {
@@ -263,6 +281,11 @@ class CParser {
       const complexity = this._cyclomaticComplexity(body);
       const isEntryPoint = this._isEntryPoint(name);
       const globalRefs = this._extractGlobalRefs(body, lineNo);
+      // Names in scope inside this function (params + local declarations), used
+      // to suppress false function-pointer references when a local shadows a
+      // function of the same name (e.g. `int vty; fun2(vty);`).
+      const localNames = this._extractLocalNames(body);
+      for (const p of params) localNames.add(p.name);
       functions.push({
         name,
         line: lineNo,
@@ -272,6 +295,7 @@ class CParser {
         complexity,
         isEntryPoint,
         globalRefs,
+        localNames: Array.from(localNames),
         bodyLength: body.split('\n').length,
         isStatic: m[0].startsWith('static'),
         returnType: m[0].slice(0, m[0].indexOf(name)).trim()
@@ -302,10 +326,27 @@ class CParser {
       const claimed = new Set();
       let m;
 
+      // Detect writes via library functions that write into their destination
+      // argument, e.g. strcpy(dest,src) / memcpy(dest,...) / sprintf(dest,...).
+      // Only the destination (first) argument is a write; source arguments are
+      // reads and are already captured by the read pass below. Run first so the
+      // destination position is claimed before the addr/read passes.
+      const callRe = /\b([A-Za-z_]\w*)\s*\(/g;
+      while ((m = callRe.exec(line)) !== null) {
+        if (!CParser.DEST_WRITE_FNS.has(m[1])) continue;
+        const dest = this._firstArg(line, m.index + m[0].length);
+        if (!dest) continue;
+        const base = dest.arg.replace(/^\s*&\s*/, '').match(/([A-Za-z_]\w*)/);
+        if (!base) continue;
+        rawRefs.push({ name: base[1], type: 'write', line: absLine });
+        const pos = line.indexOf(base[1], dest.start);
+        if (pos >= 0) claimed.add(pos);
+      }
       // Detect address-taken: &identifier
       const addrRe = /&\s*([A-Za-z_]\w*)\b/g;
       while ((m = addrRe.exec(line)) !== null) {
         const start = m.index + m[0].indexOf(m[1]);
+        if (claimed.has(start)) continue;
         rawRefs.push({ name: m[1], type: 'addr', line: absLine });
         claimed.add(start);
       }
@@ -348,6 +389,92 @@ class CParser {
       }
     });
     return rawRefs;
+  }
+
+  /**
+   * Collect candidate function-pointer references across the whole file:
+   * identifiers that appear in a value position (struct/array initializer
+   * elements, call arguments, assignment RHS, address-of) and are NOT direct
+   * calls. These reveal functions registered in command/dispatch tables or
+   * handed to task-creation / callback-registration APIs — which therefore have
+   * no direct callers. Names are filtered against the real function set in
+   * analysisDB, so collecting broadly here is safe.
+   */
+  /**
+   * Extract names of local variables declared in a function body. Used to
+   * suppress false function-pointer references where a local shadows a function
+   * of the same name. Matches `TYPE [*] name [, name2 …] [= …];` declarations,
+   * skipping statements led by a control keyword (e.g. `return x;`).
+   */
+  _extractLocalNames(body) {
+    const names = new Set();
+    const skipType = new Set([
+      'return','if','else','while','for','switch','do','goto','sizeof',
+      'typedef','case','break','continue'
+    ]);
+    const re = /^[ \t]*((?:(?:static|const|volatile|register|auto|unsigned|signed|long|short)\s+)*(?:struct\s+|union\s+|enum\s+)?[A-Za-z_]\w*)\s+((?:\*\s*)*[A-Za-z_]\w*(?:\s*\[[^\]]*\])?(?:\s*,\s*(?:\*\s*)*[A-Za-z_]\w*(?:\s*\[[^\]]*\])?)*)\s*(?:=[^;]*)?;/gm;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const firstTypeWord = m[1].trim().split(/\s+/)[0];
+      if (skipType.has(firstTypeWord)) continue;
+      for (const tok of this._splitDeclarators(m[2])) {
+        const nm = tok.replace(/=.*$/, '').match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/);
+        if (nm) names.add(nm[1]);
+      }
+    }
+    return names;
+  }
+
+  _extractFuncRefs(clean, functions) {
+    const refs = [];
+    const seen = new Set();
+    // Per-function scopes: line span + names in scope (params + locals). A use of
+    // a name inside a function that declares it locally is that local variable,
+    // not a reference to a same-named function, so it is suppressed.
+    const scopes = (functions || []).map(fn => ({
+      start: fn.line,
+      end: fn.line + fn.bodyLength + 2,
+      names: new Set(fn.localNames || [])
+    }));
+    const shadowed = (name, absLine) =>
+      scopes.some(s => absLine >= s.start && absLine <= s.end && s.names.has(name));
+    const lines = clean.split('\n');
+    lines.forEach((line, idx) => {
+      const absLine = idx + 1;
+      const idRe = /([A-Za-z_]\w*)/g;
+      let m;
+      while ((m = idRe.exec(line)) !== null) {
+        const name = m[1];
+        const start = m.index;
+        const end = start + name.length;
+        // Skip direct calls (name followed by '(') and member fields (a.b / a->b)
+        if (/^\s*\(/.test(line.slice(end))) continue;
+        if (/(?:\.|->)\s*$/.test(line.slice(0, start))) continue;
+        // Skip uses of a local/parameter that shadows a same-named function
+        if (shadowed(name, absLine)) continue;
+        const before = line.slice(0, start).replace(/\s+$/, '');
+        const after  = line.slice(end).replace(/^\s+/, '');
+        // Skip declarations: `TYPE name` / `TYPE *name` is a declared variable or
+        // parameter, not a value reference (e.g. `int vty` in a prototype). These
+        // are recognised by the preceding text ending in an identifier character
+        // once any pointer stars are removed. `return X` is a value, not a decl.
+        const beforeNoStar = before.replace(/[*\s]+$/, '');
+        if (/\w$/.test(beforeNoStar) && !/\breturn$/.test(beforeNoStar)) continue;
+        // Keep only value positions: preceded by , { ( = & [ : ? (or `return`),
+        // or starting a line (multi-line initializer / arg-list continuation),
+        // or immediately followed by , ) } ;
+        const prev = before.slice(-1);
+        const next = after.slice(0, 1);
+        const prevValue = before === '' || ',{(=&[:?'.includes(prev) || /\breturn$/.test(before);
+        const nextValue = ',)};'.includes(next);
+        if (!prevValue && !nextValue) continue;
+        const key = name + '@' + absLine;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        refs.push({ name, line: absLine });
+      }
+    });
+    return refs;
   }
 
   _extractBraceBlock(code, startBrace) {
@@ -436,6 +563,7 @@ class CParser {
     const functions = this.parseFunctions(clean, code);
     const funcNames = functions.map(f => f.name);
     const globals = this.parseGlobals(clean, funcNames);
+    const funcRefs = this._extractFuncRefs(clean, functions);
 
     // Build callers map (reverse of callees)
     const callers = new Map();
@@ -464,8 +592,17 @@ class CParser {
       }
     }
 
-    return { filePath, includes, macros, structs, globals, functions };
+    return { filePath, includes, macros, structs, globals, functions, funcRefs };
   }
 }
+
+// Standard library functions that write into their first (destination)
+// argument. A global passed there is a write, not a read.
+CParser.DEST_WRITE_FNS = new Set([
+  'strcpy','strncpy','strcat','strncat','strlcpy','strlcat',
+  'memcpy','memmove','memset','bzero',
+  'sprintf','snprintf','vsprintf','vsnprintf',
+  'fgets','gets','fread'
+]);
 
 module.exports = CParser;

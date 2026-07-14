@@ -2,6 +2,12 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.3.0
+- **Global (variable) writes through library functions** are now tracked — a global passed as the destination of `strcpy`, `strncpy`, `strcat`, `memcpy`, `memmove`, `memset`, `sprintf`, `snprintf`, `fgets`, `fread` and similar is counted as a **write** instead of a read; source arguments remain reads
+- **Indirect function references** are now detected — functions registered in command/dispatch tables, handed to task/thread-creation APIs, or used as callbacks (referenced by pointer, not called directly) no longer show as "Called by 0" or get flagged as dead code
+- New **Referenced (N)** section in the function sidebar lists each reference site (command table, `sys_task_create` call, etc.), and the CodeLens shows `⊙ referenced N×` instead of `💀 0 callers`
+- Reference detection is scope-aware: parameter/prototype names and local variables that shadow a same-named function are not miscounted as references
+
 ### v2.2.11
 - Fixed function names truncated to a single letter when the return type has no plain base token — `static unsigned long show_redirect(...)` now shows as `show_redirect` instead of `t`
 - Applies to return types built entirely from qualifier keywords (`unsigned long`, `long`, `short`) and to uppercase `typedef`/macro types (`ULONG`, `INT32`, `BOOL`), including pointer returns (`ULONG *foo(...)`) and multi-line signatures
