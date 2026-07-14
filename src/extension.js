@@ -5,6 +5,7 @@ const fs = require('fs');
 const CParser = require('./parser');
 const AnalysisDB = require('./analysisDB');
 const CTreeProvider = require('./treeProvider');
+const ControlsViewProvider = require('./controlsView');
 const TreeWebView = require('./treeWebView');
 const CThroughCodeLensProvider = require('./codeLensProvider');
 const DeadCodeReport = require('./deadCodeReport');
@@ -32,6 +33,12 @@ async function activate(context) {
     treeDataProvider: treeProvider,
     showCollapseAll: true
   });
+
+  // Search & Filter controls webview (sits above the tree)
+  const controlsProvider = new ControlsViewProvider(treeProvider);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(ControlsViewProvider.viewType, controlsProvider)
+  );
 
   // 1. Analyze current file
   context.subscriptions.push(vscode.commands.registerCommand('cThrough.analyzeFile', async () => {
@@ -93,19 +100,10 @@ async function activate(context) {
     if (fn) webView.show(fn, 'callers');
   }));
 
-  // Search sidebar
+  // Search sidebar — reveal & focus the embedded Search & Filter panel
   context.subscriptions.push(vscode.commands.registerCommand('cThrough.searchSidebar', async () => {
-    const current = treeProvider.getFilter();
-    const input = await vscode.window.showInputBox({
-      placeHolder: 'Filter functions and globals by name…',
-      prompt: 'C Through: Type to filter sidebar. Leave empty to clear.',
-      value: current,
-    });
-    if (input === undefined) return; // user pressed Escape
-    treeProvider.setFilter(input);
-    if (input) {
-      vscode.window.showInformationMessage(`C Through: Filtering by "${input}"`);
-    }
+    await vscode.commands.executeCommand('cThroughControls.focus');
+    controlsProvider.focusInput();
   }));
 
   // Show Dead Code Report

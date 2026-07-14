@@ -2,6 +2,11 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.3.1
+- **Embedded Search & Filter panel** — added a "C Through: Search & Filter" panel above the sidebar tree with a live search box (replacing the old pop-up input) that filters Includes, Structs, Macros, Globals, and Functions by name
+- **Category filter checkboxes** — toggle visibility of Includes / Structs / Macros / Globals / Functions sections directly from the panel, with Select all / Clear all shortcuts
+- The sidebar Search toolbar icon now reveals and focuses the embedded search box instead of opening a pop-up
+
 ### v2.3.0
 - **Global (variable) writes through library functions** are now tracked — a global passed as the destination of `strcpy`, `strncpy`, `strcat`, `memcpy`, `memmove`, `memset`, `sprintf`, `snprintf`, `fgets`, `fread` and similar is counted as a **write** instead of a read; source arguments remain reads
 - **Indirect function references** are now detected — functions registered in command/dispatch tables, handed to task/thread-creation APIs, or used as callbacks (referenced by pointer, not called directly) no longer show as "Called by 0" or get flagged as dead code

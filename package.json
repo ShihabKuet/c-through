@@ -3,7 +3,7 @@
   "displayName": "C Through",
   "icon": "images/icon.png",
   "description": "Relational function call tree and reference visualizer for C/C++ code",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "publisher": "ShanjidArefin",
   "license": "MIT",
   "repository": {
@@ -87,6 +87,13 @@
     ],
     "views": {
       "explorer": [
+        {
+          "id": "cThroughControls",
+          "name": "C Through: Search & Filter",
+          "type": "webview",
+          "icon": "$(search)",
+          "contextualTitle": "C Through \u2014 Search & Filter"
+        },
         {
           "id": "cThroughView",
           "name": "C Through",

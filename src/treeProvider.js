@@ -15,6 +15,15 @@ class CTreeProvider {
     this._filter = '';
     this._mode = 'file'; // 'file' | 'function' | 'callers' | 'callees'
     this._focusedFunction = null;
+    // Which category sections are shown in the file view. Toggled from the
+    // controls webview (Search & Filter panel).
+    this._categories = {
+      includes: true,
+      structs:  true,
+      macros:   true,
+      globals:  true,
+      functions: true
+    };
   }
 
   refresh() {
@@ -33,6 +42,17 @@ class CTreeProvider {
   clearFilter() {
     this._filter = '';
     this.refresh();
+  }
+
+  setCategoryEnabled(category, enabled) {
+    if (category in this._categories) {
+      this._categories[category] = !!enabled;
+      this.refresh();
+    }
+  }
+
+  getCategories() {
+    return { ...this._categories };
   }
 
   showFileView(filePath) {
@@ -75,7 +95,7 @@ class CTreeProvider {
     const items = [];
     for (const [filePath, fileData] of db.files) {
       if (this._focusedFile && filePath !== this._focusedFile) continue;
-      items.push(new FileItem(filePath, fileData, db, this._filter));
+      items.push(new FileItem(filePath, fileData, db, this._filter, this._categories));
     }
     return items.length ? items : [new InfoItem('No files match filter', '', 'warning')];
   }
@@ -107,12 +127,13 @@ class CTreeProvider {
 // ─── Tree Items ────────────────────────────────────────────────────────────
 
 class FileItem extends vscode.TreeItem {
-  constructor(filePath, fileData, db, filter) {
+  constructor(filePath, fileData, db, filter, categories) {
     super(path.basename(filePath), vscode.TreeItemCollapsibleState.Expanded);
     this.filePath = filePath;
     this.fileData = fileData;
     this.db = db;
     this.filter = filter || '';
+    this.categories = categories || { includes: true, structs: true, macros: true, globals: true, functions: true };
     this.tooltip = filePath;
     this.description = `${fileData.functions.length} functions`;
     this.iconPath = new vscode.ThemeIcon('symbol-file');
@@ -121,55 +142,66 @@ class FileItem extends vscode.TreeItem {
 
   getChildren() {
     const sections = [];
+    const cat = this.categories;
+    const f = this.filter;
+    const match = name => !f || (name || '').toLowerCase().includes(f);
 
     // Includes section
-    if (this.fileData.includes.length) {
-      sections.push(new SectionItem('Includes', this.fileData.includes.map(inc =>
-        new LeafItem(inc.file, inc.isSystem ? '<system>' : '"local"', 'symbol-file', inc.line, this.filePath)
-      )));
+    if (cat.includes) {
+      const includes = this.fileData.includes.filter(inc => match(inc.file));
+      if (includes.length) {
+        sections.push(new SectionItem('Includes', includes.map(inc =>
+          new LeafItem(inc.file, inc.isSystem ? '<system>' : '"local"', 'symbol-file', inc.line, this.filePath)
+        )));
+      }
     }
 
     // Structs/Types section
-    if (this.fileData.structs.length) {
-      sections.push(new SectionItem('Structs / Types', this.fileData.structs.map(s =>
-        new StructItem(s, this.filePath)
-      )));
+    if (cat.structs) {
+      const structs = this.fileData.structs.filter(s => match(s.name));
+      if (structs.length) {
+        sections.push(new SectionItem('Structs / Types', structs.map(s =>
+          new StructItem(s, this.filePath)
+        )));
+      }
     }
 
     // Macros section
-    const fnMacros = this.fileData.macros.filter(m => m.isFunctionLike);
-    const valMacros = this.fileData.macros.filter(m => !m.isFunctionLike);
-    if (fnMacros.length) {
-      sections.push(new SectionItem('Function Macros', fnMacros.map(m =>
-        new LeafItem(`${m.name}(${(m.params || []).join(', ')})`, m.body.slice(0, 40), 'symbol-misc', m.line, this.filePath)
-      )));
-    }
-    if (valMacros.length) {
-      sections.push(new SectionItem('Macros', valMacros.map(m =>
-        new LeafItem(m.name, m.body.slice(0, 40), 'symbol-constant', m.line, this.filePath)
-      )));
+    if (cat.macros) {
+      const fnMacros = this.fileData.macros.filter(m => m.isFunctionLike && match(m.name));
+      const valMacros = this.fileData.macros.filter(m => !m.isFunctionLike && match(m.name));
+      if (fnMacros.length) {
+        sections.push(new SectionItem('Function Macros', fnMacros.map(m =>
+          new LeafItem(`${m.name}(${(m.params || []).join(', ')})`, m.body.slice(0, 40), 'symbol-misc', m.line, this.filePath)
+        )));
+      }
+      if (valMacros.length) {
+        sections.push(new SectionItem('Macros', valMacros.map(m =>
+          new LeafItem(m.name, m.body.slice(0, 40), 'symbol-constant', m.line, this.filePath)
+        )));
+      }
     }
 
     // Globals section — filtered
-    const filteredGlobals = this.filter
-      ? this.fileData.globals.filter(g => g.name.toLowerCase().includes(this.filter))
-      : this.fileData.globals;
-    if (filteredGlobals.length) {
-      sections.push(new SectionItem('Global Variables', filteredGlobals.map(g =>
-        new GlobalVarItem(g, this.filePath, this.db)
-      )));
+    if (cat.globals) {
+      const filteredGlobals = this.fileData.globals.filter(g => match(g.name));
+      if (filteredGlobals.length) {
+        sections.push(new SectionItem('Global Variables', filteredGlobals.map(g =>
+          new GlobalVarItem(g, this.filePath, this.db)
+        )));
+      }
     }
 
     // Functions section — filtered
-    const filteredFunctions = this.filter
-      ? this.fileData.functions.filter(fn => fn.name.toLowerCase().includes(this.filter))
-      : this.fileData.functions;
-    if (filteredFunctions.length) {
-      sections.push(new SectionItem('Functions', filteredFunctions.map(fn =>
-        new FunctionDefItem(fn, this.filePath, this.db)
-      )));
-    } else if (!this.filter) {
-      sections.push(new SectionItem('Functions', []));
+    if (cat.functions) {
+      const filteredFunctions = this.fileData.functions.filter(fn => match(fn.name));
+      if (filteredFunctions.length) {
+        sections.push(new SectionItem('Functions', filteredFunctions.map(fn =>
+          new FunctionDefItem(fn, this.filePath, this.db)
+        )));
+      } else if (!f) {
+        sections.push(new SectionItem('Functions', []));
+      }
     }
 
     return sections;

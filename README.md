@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.3.0**
+> Current Version: **2.3.1**
 
 ---
 
@@ -91,13 +91,13 @@ Cross-file caller/callee relationships are fully resolved after any multi-file s
 
 ### 🔍 Search & Filter
 
-**Sidebar Search:**
-Filter functions and globals in the sidebar by name instantly.
+**Sidebar Search & Filter:**
+The **C Through: Search & Filter** panel sits above the sidebar tree with an embedded search box and category checkboxes.
 
-- Click the 🔍 icon in the C Through sidebar toolbar
-- Or `Ctrl+Shift+P` → `C Through: Search Sidebar`
-- Type any part of a function or variable name — the sidebar filters to matches only
-- Leave empty and confirm to clear the filter
+- Type any part of a name in the search box — Includes, Structs, Macros, Globals, and Functions filter to matches instantly (no pop-up)
+- Toggle the **Includes / Structs / Macros / Globals / Functions** checkboxes to show or hide whole sections, with **Select all / Clear all** shortcuts
+- Click **✕** to clear the search
+- The 🔍 toolbar icon (or `Ctrl+Shift+P` → `C Through: Search Sidebar`) reveals and focuses the search box
 
 **Call Graph Search:**
 Search inside the visual call graph to find nodes quickly.
@@ -175,7 +175,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.3.0.vsix
+code --install-extension c-through-2.3.1.vsix
 ```
 
 ---
