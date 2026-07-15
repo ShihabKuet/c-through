@@ -213,11 +213,6 @@
           "type": "boolean",
           "default": true,
           "description": "Sync the sidebar selection with the editor cursor — selecting a function or global in code highlights it in the C Through tree."
-        },
-        "cThrough.maxLinesPerFile": {
-          "type": "number",
-          "default": 8000,
-          "description": "Maximum lines to parse per file. Files larger than this are truncated. Increase for large codebases."
         }
       }
     }
