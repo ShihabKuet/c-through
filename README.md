@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.3.2**
+> Current Version: **2.3.3**
 
 ---
 
@@ -98,6 +98,7 @@ The **C Through: Search & Filter** panel sits above the sidebar tree with an emb
 - Toggle the **Includes / Structs / Macros / Globals / Functions** checkboxes to show or hide whole sections, with **Select all / Clear all** shortcuts
 - Click **✕** to clear the search
 - The 🔍 toolbar icon (or `Ctrl+Shift+P` → `C Through: Search Sidebar`) reveals and focuses the search box
+- Press **`Ctrl+Alt+S`** (`Cmd+Alt+S` on macOS) to jump straight into the search box from anywhere — rebind it via the **⌨ Shortcut** link in the panel or `C Through: Configure Keyboard Shortcuts`
 
 **Call Graph Search:**
 Search inside the visual call graph to find nodes quickly.
@@ -183,7 +184,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.3.2.vsix
+code --install-extension c-through-2.3.3.vsix
 ```
 
 ---
@@ -206,7 +207,8 @@ code --install-extension c-through-2.3.2.vsix
 | `C Through: Show Functions Called By This` | Open callees tree |
 | `C Through: Show Functions Calling This` | Open callers tree |
 | `C Through: Toggle CodeLens` | Show/hide inline CodeLens |
-| `C Through: Search Sidebar` | Filter sidebar functions and globals by name |
+| `C Through: Search Sidebar` | Reveal & focus the Search & Filter box (`Ctrl+Alt+S`) |
+| `C Through: Configure Keyboard Shortcuts` | Open Keyboard Shortcuts filtered to C Through commands |
 | `C Through: Show Dead Code Report` | Open the dead code analysis report panel |
 
 ### Context Menus

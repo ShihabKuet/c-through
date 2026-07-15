@@ -2,6 +2,10 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.3.3
+- **Keyboard shortcut for search** — `Ctrl+Alt+S` (`Cmd+Alt+S` on macOS) reveals the Search & Filter panel and jumps straight into the search box (rebindable like any VS Code shortcut)
+- Added a **C Through: Configure Keyboard Shortcuts** command (and a ⌨ Shortcut link in the Search & Filter panel) that opens the Keyboard Shortcuts editor pre-filtered to C Through commands
+
 ### v2.3.2
 - **Cursor sync** — moving the editor cursor to a function or global variable now selects and reveals that symbol in the C Through sidebar. Placing the cursor on a call site reveals the called function's definition; anywhere else selects the enclosing function
 - Sync highlights the symbol without stealing focus from the editor, and can be toggled off with the new `cThrough.syncCursor` setting

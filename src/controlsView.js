@@ -41,6 +41,9 @@ class ControlsViewProvider {
           this._tree.setFilter('');
           this._postState();
           break;
+        case 'configure':
+          vscode.commands.executeCommand('cThrough.configureKeybindings');
+          break;
       }
     });
   }
@@ -121,6 +124,7 @@ class ControlsViewProvider {
   <div class="toggles">
     <a id="all">Select all</a>
     <a id="none">Clear all</a>
+    <a id="shortcut" title="Configure the keyboard shortcut for this panel">⌨ Shortcut</a>
   </div>
 <script>
   const vscode = acquireVsCodeApi();
@@ -146,6 +150,7 @@ class ControlsViewProvider {
 
   document.getElementById('all').addEventListener('click', () => setAll(true));
   document.getElementById('none').addEventListener('click', () => setAll(false));
+  document.getElementById('shortcut').addEventListener('click', () => vscode.postMessage({ type: 'configure' }));
   function setAll(on) {
     boxes.forEach(b => {
       if (b.checked !== on) {

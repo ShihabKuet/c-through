@@ -106,6 +106,11 @@ async function activate(context) {
     controlsProvider.focusInput();
   }));
 
+  // Open the Keyboard Shortcuts editor pre-filtered to C Through commands
+  context.subscriptions.push(vscode.commands.registerCommand('cThrough.configureKeybindings', async () => {
+    await vscode.commands.executeCommand('workbench.action.openGlobalKeybindings', 'C Through');
+  }));
+
   // Show Dead Code Report
   context.subscriptions.push(vscode.commands.registerCommand('cThrough.showDeadCodeReport', async () => {
     deadCodeReport.show();
