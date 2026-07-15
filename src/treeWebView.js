@@ -83,6 +83,7 @@ class TreeWebView {
     --red: #f85149;
     --purple: #bc8cff;
     --cyan: #76e3ea;
+    --pink: #f778ba;
     --node-r: 28px;
     --line: #30363d;
   }
@@ -99,6 +100,7 @@ class TreeWebView {
     --red: #cc2200;
     --purple: #7b44cc;
     --cyan: #007a8a;
+    --pink: #c9187e;
     --node-r: 28px;
     --line: #bbbbbb;
   }
@@ -257,18 +259,48 @@ class TreeWebView {
     font-size: 16px;
     padding: 0;
   }
-  #legend {
+  #selected-info {
     position: absolute;
     bottom: 12px;
     left: 12px;
+    width: 260px;
+    max-height: 45%;
+    overflow-y: auto;
     background: var(--bg2);
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 11px;
   }
+  #selected-info .si-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text2); margin-bottom: 6px;
+  }
+  #selected-info .si-hint { color: var(--text2); font-size: 11px; }
+  #selected-info .kind-chip {
+    display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 8px;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;
+    border: 1px solid currentColor;
+  }
+  .sym-group { margin-top: 8px; }
+  .sym-group-title { font-size: 10px; color: var(--text2); margin-bottom: 3px; }
+  .sym-item {
+    display: flex; justify-content: space-between; gap: 8px; padding: 2px 4px;
+    border-radius: 3px; cursor: pointer; font-size: 11px;
+  }
+  .sym-item:hover { background: var(--bg3); }
+  .sym-item .sym-name { font-weight: 600; }
+  .sym-item .sym-meta { color: var(--text2); }
   .legend-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
   .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-dot.diamond { border-radius: 0; transform: rotate(45deg); width: 9px; height: 9px; }
+  /* Collapsible sidebar sections */
+  .sidebar-title { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+  .sidebar-title .chevron { transition: transform 0.15s; font-size: 9px; }
+  .section.collapsed .chevron { transform: rotate(-90deg); }
+  .section.collapsed .section-body { display: none; }
+  .kind-filters { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+  .kind-filters label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; }
   #statusbar {
     background: var(--bg2);
     border-top: 1px solid var(--border);
@@ -296,6 +328,7 @@ class TreeWebView {
     <button onclick="resetView()" title="Reset View">⟳</button>
     <button onclick="expandAll()" title="Expand All">➕</button>
     <button onclick="collapseAll()" title="Collapse All">➖</button>
+    <button id="btn-data" onclick="toggleData()" title="Show data symbols (globals, macros, structs) as nodes">◇</button>
     <button id="btn-sidebar" onclick="toggleSidebar()" title="Expand/Collapse Sidebar">☰</button>
     <div class="toolbar-sep"></div>
     <input id="search-input" type="text" placeholder="Search nodes…" oninput="onSearch(this.value)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:4px;font-size:11px;font-family:inherit;width:130px;outline:none;" title="Search and highlight matching nodes"/>
@@ -314,23 +347,33 @@ class TreeWebView {
       <button class="zoom-btn" onclick="zoomOut()">−</button>
       <button class="zoom-btn" onclick="resetView()" title="Fit">⊡</button>
     </div>
-    <div id="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>Root</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>Internal</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#d29922"></div>External / Unknown</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#8b949e"></div>Stdlib</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#f85149"></div>Recursive</div>
+    <div id="selected-info">
+      <div class="si-title">Selected Node</div>
+      <div id="si-body"><div class="si-hint">Click a node to inspect it</div></div>
     </div>
   </div>
   <div id="sidebar">
     <div id="sidebar-content">
-      <div class="section">
-        <div class="sidebar-title">Selected Function</div>
-        <div id="fn-details"><div style="color:var(--text2);font-size:12px">Click a node to inspect it</div></div>
+      <div class="section" id="sec-legend">
+        <div class="sidebar-title" onclick="toggleSection('sec-legend')"><span class="chevron">▼</span>Legend</div>
+        <div class="section-body">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Root / global read</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Internal function</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>External / global write</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Recursive</div>
+          <div class="legend-item"><div class="legend-dot diamond" style="background:var(--purple)"></div>Global (addr-taken)</div>
+          <div class="legend-item"><div class="legend-dot diamond" style="background:var(--cyan)"></div>Macro</div>
+          <div class="legend-item"><div class="legend-dot diamond" style="background:var(--pink)"></div>Struct</div>
+          <div class="kind-filters">
+            <label><input type="checkbox" id="kind-globals" checked onchange="toggleKind('globals',this.checked)"/> Globals</label>
+            <label><input type="checkbox" id="kind-macros" checked onchange="toggleKind('macros',this.checked)"/> Macros</label>
+            <label><input type="checkbox" id="kind-structs" checked onchange="toggleKind('structs',this.checked)"/> Structs</label>
+          </div>
+        </div>
       </div>
-      <div class="section">
-        <div class="sidebar-title">Workspace Stats</div>
-        <div id="stats-panel"></div>
+      <div class="section" id="sec-stats">
+        <div class="sidebar-title" onclick="toggleSection('sec-stats')"><span class="chevron">▼</span>Workspace Stats</div>
+        <div class="section-body"><div id="stats-panel"></div></div>
       </div>
     </div>
   </div>
@@ -347,6 +390,9 @@ let transform = { x: 0, y: 0, scale: 1 };
 let isDragging = false, dragStart = { x: 0, y: 0 };
 let didDrag = false;
 let searchTerm = '';
+let showData = false;                                   // show data-symbol nodes?
+let dataKinds = { globals: true, macros: true, structs: true };
+let selectedKey = null;                                 // key of the highlighted node
 
 // ─── Collapse state ───────────────────────────────────────────────────────────
 // Key: stable string = "depth:parentName:name"
@@ -428,6 +474,40 @@ if (savedState.sidebar === 'closed') {
   document.getElementById('btn-sidebar').classList.remove('active');
 }
 
+// ─── Data-symbol nodes (globals / macros / structs) ───────────────────────────
+if (savedState.showData) showData = true;
+if (savedState.dataKinds) dataKinds = { ...dataKinds, ...savedState.dataKinds };
+document.getElementById('btn-data').classList.toggle('active', showData);
+document.getElementById('kind-globals').checked = dataKinds.globals;
+document.getElementById('kind-macros').checked  = dataKinds.macros;
+document.getElementById('kind-structs').checked = dataKinds.structs;
+
+function toggleData() {
+  showData = !showData;
+  document.getElementById('btn-data').classList.toggle('active', showData);
+  vscode.setState({ ...(vscode.getState() || {}), showData });
+  render();
+}
+
+function toggleKind(kind, on) {
+  dataKinds[kind] = on;
+  vscode.setState({ ...(vscode.getState() || {}), dataKinds });
+  if (showData) render();
+}
+
+// ─── Collapsible sidebar sections ─────────────────────────────────────────────
+(savedState.collapsedSections || []).forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('collapsed');
+});
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  const collapsed = Array.from(document.querySelectorAll('.section.collapsed')).map(s => s.id);
+  vscode.setState({ ...(vscode.getState() || {}), collapsedSections: collapsed });
+}
+
 // ─── Stable node key ──────────────────────────────────────────────────────────
 function nodeKey(name, depth, parentName) {
   return depth + ':' + (parentName || '') + ':' + name;
@@ -453,7 +533,8 @@ function flattenTree(node, parent, depth, parentName, counter) {
   const n   = {
     id, key,
     name: node.name, file: node.file, line: node.line, depth,
-    returnType: node.returnType, params: node.params,
+    kind: node.kind || 'function',
+    returnType: node.returnType, params: node.params, symbols: node.symbols,
     truncated: node.truncated, external: node.external,
     parentId: parent ? parent.id : null,
     children: [],
@@ -464,12 +545,41 @@ function flattenTree(node, parent, depth, parentName, counter) {
 
   // Only descend if THIS node is not collapsed
   const collapsed = collapseState.get(key) === true;
-  if (!collapsed && node.children && node.children.length) {
-    for (const child of node.children) {
-      n.children.push(flattenTree(child, n, depth + 1, node.name, counter));
+  if (!collapsed) {
+    if (node.children && node.children.length) {
+      for (const child of node.children) {
+        n.children.push(flattenTree(child, n, depth + 1, node.name, counter));
+      }
+    }
+    // Attach data-symbol leaf nodes (globals / macros / structs) when enabled
+    if (showData && node.symbols) {
+      for (const d of collectDataChildren(node.symbols)) {
+        const dk  = 'data:' + node.name + ':' + d.kind + ':' + d.name;
+        const did = counter.v++;
+        const dn  = {
+          id: did, key: dk, name: d.name, kind: d.kind, access: d.access,
+          file: d.file, line: d.line, depth: depth + 1,
+          parentId: n.id, children: [], rawChildCount: 0
+        };
+        allNodes.push(dn);
+        allLinks.push({ source: n.id, target: did });
+        n.children.push(dn);
+      }
     }
   }
   return n;
+}
+
+// Flatten a node's symbols into leaf descriptors for the visible kinds.
+function collectDataChildren(symbols) {
+  const out = [];
+  if (dataKinds.globals) for (const g of (symbols.globals || []))
+    out.push({ kind: 'global', name: g.name, access: g.access, file: g.file, line: g.line });
+  if (dataKinds.macros) for (const m of (symbols.macros || []))
+    out.push({ kind: 'macro', name: m.name, file: m.file, line: m.line });
+  if (dataKinds.structs) for (const s of (symbols.structs || []))
+    out.push({ kind: 'struct', name: s.name, file: s.file, line: s.line });
+  return out;
 }
 
 function computeLayout() {
@@ -504,6 +614,26 @@ function computeLayout() {
 // ─── Render ───────────────────────────────────────────────────────────────────
 const svg = document.getElementById('tree-svg');
 let g;
+
+// Node color by kind (theme-aware). Functions: root/recursive/external/internal.
+// Data symbols: globals by access, macros, structs.
+function nodeColor(n, kind, isDark) {
+  const C = isDark
+    ? { accent:'#58a6ff', green:'#3fb950', orange:'#d29922', red:'#f85149', purple:'#bc8cff', cyan:'#76e3ea', pink:'#f778ba' }
+    : { accent:'#0066cc', green:'#1a7a1a', orange:'#b85c00', red:'#cc2200', purple:'#7b44cc', cyan:'#007a8a', pink:'#c9187e' };
+  if (kind === 'global') {
+    if ((n.access || '').includes('write')) return C.orange;
+    if (n.access === 'addr') return C.purple;
+    return C.accent;
+  }
+  if (kind === 'macro')  return C.cyan;
+  if (kind === 'struct') return C.pink;
+  // function
+  if (n.id === 0)     return C.accent;
+  if (n.truncated)    return C.red;
+  if (n.external)     return C.orange;
+  return C.green;
+}
 
 function render() {
   computeLayout();
@@ -547,25 +677,33 @@ function render() {
   // Nodes
   for (const n of allNodes) {
     const isDark = !document.documentElement.classList.contains('light');
-    const color = n.id === 0
-      ? (isDark ? '#58a6ff' : '#0066cc')
-      : n.truncated
-        ? (isDark ? '#f85149' : '#cc2200')
-        : n.external
-          ? (isDark ? '#d29922' : '#b85c00')
-          : (isDark ? '#3fb950' : '#1a7a1a');
+    const kind = n.kind || 'function';
+    const color = nodeColor(n, kind, isDark);
+    const isData = kind !== 'function';
     const isCollapsed = collapseState.get(n.key) === true;
 
     const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     grp.setAttribute('class', 'node');
     grp.setAttribute('transform', \`translate(\${n.x},\${n.y})\`);
 
-    // Circle
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('r', '20');
+    // Shape: circle for functions, diamond for data symbols
+    let circle;
+    if (isData) {
+      circle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      circle.setAttribute('x', '-14'); circle.setAttribute('y', '-14');
+      circle.setAttribute('width', '28'); circle.setAttribute('height', '28');
+      circle.setAttribute('transform', 'rotate(45)');
+    } else {
+      circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('r', '20');
+    }
     circle.setAttribute('fill', color + '22');
     circle.setAttribute('stroke', color);
     if (n.id === 0) circle.setAttribute('filter', 'url(#glow)');
+    if (n.key === selectedKey) {
+      circle.setAttribute('stroke-width', '4');
+      circle.setAttribute('filter', 'url(#glow)');
+    }
     grp.appendChild(circle);
 
     // Initial letter
@@ -706,25 +844,54 @@ function collapseAll() {
 }
 
 // ─── Node click ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function baseName(f) { return f ? f.split(/[\\/]/).pop() : ''; }
+
+function symGroup(title, items) {
+  if (!items || !items.length) return '';
+  const rows = items.map(it => {
+    const meta = (it.access ? it.access + ' · ' : '') + (it.file ? baseName(it.file) + ':' + it.line : '');
+    const jump = it.file && it.line ? \`onclick="jumpTo('\${esc(it.file)}',\${it.line})"\` : '';
+    return \`<div class="sym-item" \${jump}><span class="sym-name">\${esc(it.name)}</span><span class="sym-meta">\${esc(meta)}</span></div>\`;
+  }).join('');
+  return \`<div class="sym-group"><div class="sym-group-title">\${title} (\${items.length})</div>\${rows}</div>\`;
+}
+
 function onNodeClick(n) {
-  document.querySelectorAll('.node circle').forEach(c => c.style.strokeWidth = '2');
-  const detailEl = document.getElementById('fn-details');
-  detailEl.innerHTML =
-    \`<div class="info-row"><span class="info-label">Name</span><span class="info-value func">\${n.name}</span></div>\` +
-    (n.file ? \`<div class="info-row"><span class="info-label">File</span><span class="info-value file">\${n.file.split(/[\\/]/).pop()}</span></div>\` : '') +
+  selectedKey = n.key;
+  const kind = n.kind || 'function';
+  const body = document.getElementById('si-body');
+  const chipColor = nodeColor(n, kind, !document.documentElement.classList.contains('light'));
+  const chip = kind === 'function' ? '' :
+    \`<span class="kind-chip" style="color:\${chipColor}">\${kind}\${n.access ? ' · ' + n.access : ''}</span>\`;
+
+  let html =
+    \`<div class="info-row"><span class="info-label">Name</span><span class="info-value func">\${esc(n.name)}\${chip}</span></div>\` +
+    (n.file ? \`<div class="info-row"><span class="info-label">File</span><span class="info-value file">\${esc(baseName(n.file))}</span></div>\` : '') +
     (n.line ? \`<div class="info-row"><span class="info-label">Line</span><span class="info-value">\${n.line}</span></div>\` : '') +
-    (n.returnType ? \`<div class="info-row"><span class="info-label">Returns</span><span class="info-value">\${n.returnType}</span></div>\` : '') +
-    \`<div class="info-row"><span class="info-label">Depth</span><span class="info-value">\${n.depth}</span></div>\` +
-    \`<div class="info-row"><span class="info-label">Children</span><span class="info-value">\${n.rawChildCount}</span></div>\` +
-    \`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">\` +
-    (n.file && n.line ? \`<button onclick="jumpTo('\${n.file}',\${n.line})" style="font-size:11px">Go to Source</button>\` : '') +
-    \`<button onclick="drillCallees('\${n.name}')" style="font-size:11px">▼ Callees</button>\` +
-    \`<button onclick="drillCallers('\${n.name}')" style="font-size:11px">▲ Callers</button>\` +
-    \`</div>\`;
+    (n.returnType ? \`<div class="info-row"><span class="info-label">Returns</span><span class="info-value">\${esc(n.returnType)}</span></div>\` : '');
+
+  html += \`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">\`;
+  if (n.file && n.line) html += \`<button onclick="jumpTo('\${esc(n.file)}',\${n.line})" style="font-size:11px">Go to \${kind === 'function' ? 'Source' : 'Definition'}</button>\`;
+  if (kind === 'function') {
+    html += \`<button onclick="drillCallees('\${esc(n.name)}')" style="font-size:11px">▼ Callees</button>\`;
+    html += \`<button onclick="drillCallers('\${esc(n.name)}')" style="font-size:11px">▲ Callers</button>\`;
+  }
+  html += \`</div>\`;
+
+  // For a function, list the data symbols it touches
+  if (kind === 'function' && n.symbols) {
+    html += symGroup('Globals', n.symbols.globals);
+    html += symGroup('Macros', n.symbols.macros);
+    html += symGroup('Structs', n.symbols.structs);
+  }
+
+  body.innerHTML = html;
   document.getElementById('statusbar').textContent =
-    n.name + ' · ' + (n.file ? n.file.split(/[\\/]/).pop() : 'external') +
+    n.name + ' · ' + (kind === 'function' ? (n.file ? baseName(n.file) : 'external') : kind) +
     ' · Double-click node or click +badge to expand/collapse that node only';
   if (n.file && n.line) vscode.postMessage({ type: 'jumpTo', file: n.file, line: n.line });
+  render();
 }
 
 function jumpTo(file, line) { vscode.postMessage({ type: 'jumpTo', file, line }); }

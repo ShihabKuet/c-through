@@ -2,6 +2,17 @@
 
 All notable changes to the "C Through" extension are documented here.
 
+### v2.4.0
+- **Data symbols in the call graph** — the graph is no longer limited to callers/callees. A new `◇` toolbar toggle shows the **global variables, macros, and structs** each function touches, as diamond nodes attached to it (globals colored by access: write / read / address-taken; macros; structs). Per-kind checkboxes let you show only what you need
+- **Selected-node panel** — clicking any node fills an info card with its details; selecting a function also lists every global, macro, and struct it uses, each clickable to jump to its definition. Works whether or not the `◇` data nodes are shown
+- Selected nodes are now **highlighted** in the graph
+- **Legend moved into the sidebar** as a collapsible section — it no longer floats over the canvas. It is now theme-aware (correct in light and dark) and matches the actual node colors
+- All call-graph sidebar sections are **collapsible**, and their state persists
+- Fixed the duplicated Search & Filter panel title (`C Through — Search & Filter: C Through: Search & Filter`)
+- **Performance: faster parsing** — replaced an O(file × matches) line-number computation with a per-file line-offset table. Parsing is ~10% faster overall and ~18% faster on large (4,000+ line) files
+- **Performance: much faster saves** — `removeFile` repeated a workspace-wide sweep once per function in the file. It now runs once: 22 ms → 0.9 ms on a medium workspace, and 98 ms → 5 ms on a large one. Saving a 4,700-line file dropped from ~94 ms to ~75 ms, and no longer slows down as more of the workspace is analyzed
+- Fixed same-named `static` functions in different files evicting each other from the index when one was saved; a surviving definition now correctly takes over
+
 ### v2.3.3
 - **Keyboard shortcut for search** — `Ctrl+Alt+S` (`Cmd+Alt+S` on macOS) reveals the Search & Filter panel and jumps straight into the search box (rebindable like any VS Code shortcut)
 - Added a **C Through: Configure Keyboard Shortcuts** command (and a ⌨ Shortcut link in the Search & Filter panel) that opens the Keyboard Shortcuts editor pre-filtered to C Through commands

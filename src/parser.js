@@ -76,16 +76,39 @@ class CParser {
   }
 
   /**
+   * Build a table of line-start offsets for `text`. Used with _lineAt() to turn
+   * a match index into a line number in O(log n) instead of slicing and
+   * splitting the whole prefix on every match (which is O(text × matches)).
+   */
+  _lineOffsets(text) {
+    const offs = [0];
+    let i = 0;
+    while ((i = text.indexOf('\n', i)) !== -1) offs.push(++i);
+    return offs;
+  }
+
+  /** 1-based line number for a character index, via binary search. */
+  _lineAt(offs, index) {
+    let lo = 0, hi = offs.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (offs[mid] <= index) lo = mid; else hi = mid - 1;
+    }
+    return lo + 1;
+  }
+
+  /**
    * Extract all #include directives
    */
-  parseIncludes(code) {
+  parseIncludes(code, lineOffs) {
     const includes = [];
+    const offs = lineOffs || this._lineOffsets(code);
     const re = /^#\s*include\s+[<"]([^>"]+)[>"]/gm;
     let m;
     while ((m = re.exec(code)) !== null) {
       includes.push({
         file: m[1],
-        line: code.slice(0, m.index).split('\n').length,
+        line: this._lineAt(offs, m.index),
         isSystem: m[0].includes('<')
       });
     }
@@ -95,8 +118,9 @@ class CParser {
   /**
    * Extract macro definitions
    */
-  parseMacros(code) {
+  parseMacros(code, lineOffs) {
     const macros = [];
+    const offs = lineOffs || this._lineOffsets(code);
     const re = /^#\s*define\s+([A-Za-z_]\w*)(?:\(([^)]*)\))?\s+(.+)?/gm;
     let m;
     while ((m = re.exec(code)) !== null) {
@@ -104,7 +128,7 @@ class CParser {
         name: m[1],
         params: m[2] !== undefined ? m[2].split(',').map(p => p.trim()) : null,
         body: m[3] ? m[3].trim() : '',
-        line: code.slice(0, m.index).split('\n').length,
+        line: this._lineAt(offs, m.index),
         isFunctionLike: m[2] !== undefined
       });
     }
@@ -114,8 +138,9 @@ class CParser {
   /**
    * Extract struct/typedef definitions
    */
-  parseStructs(code) {
+  parseStructs(code, lineOffs) {
     const structs = [];
+    const offs = lineOffs || this._lineOffsets(code);
     // typedef struct { ... } Name;
     const re1 = /typedef\s+struct\s*(\w*)\s*\{([^}]*)\}\s*(\w+)\s*;/gs;
     let m;
@@ -123,7 +148,7 @@ class CParser {
       structs.push({
         name: m[3],
         tag: m[1] || m[3],
-        line: code.slice(0, m.index).split('\n').length,
+        line: this._lineAt(offs, m.index),
         isTypedef: true,
         fields: this._parseStructFields(m[2])
       });
@@ -135,7 +160,7 @@ class CParser {
         structs.push({
           name: m[1],
           tag: m[1],
-          line: code.slice(0, m.index).split('\n').length,
+          line: this._lineAt(offs, m.index),
           isTypedef: false,
           fields: this._parseStructFields(m[2])
         });
@@ -159,9 +184,10 @@ class CParser {
   /**
    * Extract global variable declarations
    */
-  parseGlobals(code, functionNames) {
+  parseGlobals(code, functionNames, lineOffs) {
     const globals = [];
     const fnSet = new Set(functionNames);
+    const offs = lineOffs || this._lineOffsets(code);
 
     // Match any file-scope variable declaration statement:
     // optional qualifiers + any type identifier + a comma-separated declarator list + semicolon.
@@ -190,7 +216,7 @@ class CParser {
       // (e.g. single-line `struct s { int a; };`), not a variable declaration.
       if (/\{/.test(declarators.split('=')[0])) continue;
 
-      const line     = code.slice(0, m.index).split('\n').length;
+      const line     = this._lineAt(offs, m.index);
       const isExtern = /\bextern\b/.test(decl);
       const isStatic = /\bstatic\b/.test(decl);
 
@@ -257,8 +283,9 @@ class CParser {
   /**
    * Extract all function definitions with their bodies
    */
-  parseFunctions(cleanCode, originalCode) {
+  parseFunctions(cleanCode, originalCode, lineOffs) {
     const functions = [];
+    const offs = lineOffs || this._lineOffsets(cleanCode);
     // Match: [return_type] function_name([params]) {
     // Handles: static, inline, extern, pointer returns, etc.
     // The return-type base token is optional: types made entirely of qualifier
@@ -274,7 +301,7 @@ class CParser {
       const bodyStart = m.index + m[0].length - 1;
       const body = this._extractBraceBlock(cleanCode, bodyStart);
       if (!body) continue;
-      const lineNo = cleanCode.slice(0, m.index).split('\n').length;
+      const lineNo = this._lineAt(offs, m.index);
       const params = this._parseParams(m[2]);
       const calls = this._extractCalls(body, name);
       const refs = this._extractVariableRefs(body);
@@ -286,6 +313,10 @@ class CParser {
       // function of the same name (e.g. `int vty; fun2(vty);`).
       const localNames = this._extractLocalNames(body);
       for (const p of params) localNames.add(p.name);
+      // Candidate type names used by this function (struct/union/enum tags,
+      // declaration and parameter types). Filtered against the real struct set
+      // in analysisDB, so collecting broadly here is safe.
+      const typeRefs = this._extractTypeRefs(body, params);
       functions.push({
         name,
         line: lineNo,
@@ -296,6 +327,7 @@ class CParser {
         isEntryPoint,
         globalRefs,
         localNames: Array.from(localNames),
+        typeRefs,
         bodyLength: body.split('\n').length,
         isStatic: m[0].startsWith('static'),
         returnType: m[0].slice(0, m[0].indexOf(name)).trim()
@@ -423,6 +455,48 @@ class CParser {
       }
     }
     return names;
+  }
+
+  /**
+   * Collect candidate type names referenced by a function: struct/union/enum
+   * tags used in the body, plus the base type token of local declarations and
+   * parameters. Names are filtered against the real struct set in analysisDB,
+   * so over-collecting primitives here is harmless.
+   */
+  _extractTypeRefs(body, params) {
+    const types = new Set();
+    // Words that are qualifiers/primitives, not a struct-like type name.
+    const skip = new Set([
+      'static','const','volatile','register','auto','unsigned','signed',
+      'long','short','struct','union','enum',
+      'int','char','float','double','void','bool','_Bool',
+      'return','if','else','while','for','switch','do','goto','sizeof',
+      'typedef','case','break','continue'
+    ]);
+
+    // (a) explicit struct/union/enum tags anywhere in the body
+    const tagRe = /\b(?:struct|union|enum)\s+([A-Za-z_]\w*)/g;
+    let m;
+    while ((m = tagRe.exec(body)) !== null) types.add(m[1]);
+
+    // (b) leading type token of local variable declarations
+    const declRe = /^[ \t]*((?:(?:static|const|volatile|register|auto|unsigned|signed|long|short)\s+)*(?:struct\s+|union\s+|enum\s+)?[A-Za-z_]\w*)\s+(?:\*\s*)*[A-Za-z_]\w*\s*(?:\[[^\]]*\])?\s*(?:[;,=])/gm;
+    while ((m = declRe.exec(body)) !== null) {
+      const words = m[1].trim().split(/\s+/);
+      const base = words[words.length - 1];
+      if (!skip.has(base)) types.add(base);
+    }
+
+    // (c) parameter types
+    for (const p of (params || [])) {
+      const words = (p.raw || '').replace(/[*]/g, ' ').trim().split(/\s+/).filter(Boolean);
+      words.pop(); // drop the parameter name
+      for (const w of words) {
+        if (/^[A-Za-z_]\w*$/.test(w) && !skip.has(w)) types.add(w);
+      }
+    }
+
+    return Array.from(types);
   }
 
   _extractFuncRefs(clean, functions) {
@@ -557,12 +631,16 @@ class CParser {
    */
   parseFile(code, filePath) {
     const clean = this.stripComments(code);
-    const includes = this.parseIncludes(code);
-    const macros = this.parseMacros(code);
-    const structs = this.parseStructs(clean);
-    const functions = this.parseFunctions(clean, code);
+    // stripComments blanks comment/string contents but preserves every newline,
+    // so `clean` and `code` share identical line offsets — build the table once
+    // and reuse it for every phase below.
+    const lineOffs = this._lineOffsets(code);
+    const includes = this.parseIncludes(code, lineOffs);
+    const macros = this.parseMacros(code, lineOffs);
+    const structs = this.parseStructs(clean, lineOffs);
+    const functions = this.parseFunctions(clean, code, lineOffs);
     const funcNames = functions.map(f => f.name);
-    const globals = this.parseGlobals(clean, funcNames);
+    const globals = this.parseGlobals(clean, funcNames, lineOffs);
     const funcRefs = this._extractFuncRefs(clean, functions);
 
     // Build callers map (reverse of callees)

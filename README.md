@@ -8,7 +8,7 @@ Large C codebases are hard to navigate. Functions call other functions across do
 
 **C Through closes that gap.** It runs entirely inside VS Code, requires zero configuration, no compiler, no build system — just open a file and your code structure appears instantly.
 
-> Current Version: **2.3.3**
+> Current Version: **2.4.0**
 
 ---
 
@@ -36,11 +36,12 @@ A fully interactive visual graph of function call relationships.
 
 - **Pan** — click and drag the canvas
 - **Zoom** — scroll wheel or +/− buttons
-- **Click node** — jump to source + inspect details in sidebar
+- **Click node** — highlights it and fills the **Selected Node** card with its details
 - **Double-click node** — collapse or expand that node's children independently
 - **Click +N badge** — toggle a single node without affecting siblings
 - **⬇ Top→Down / ➡ Left→Right** — toggle layout direction
 - **Drill down** — re-root the tree on any node
+- **☰ Sidebar** — collapsible **Legend** and **Workspace Stats** sections
 
 **Node colors:**
 
@@ -50,6 +51,23 @@ A fully interactive visual graph of function call relationships.
 | 🟢 Green | Internal project function |
 | 🟠 Orange | External / unknown function |
 | 🔴 Red | Recursive call detected |
+
+---
+
+### ◇ Data Symbols in the Graph
+The graph isn't limited to callers and callees. Toggle the **◇** toolbar button to see the **globals, macros, and structs** each function actually touches, drawn as diamond nodes attached to it.
+
+| Shape / Color | Meaning |
+|---|---|
+| ◇ Orange | Global — written |
+| ◇ Blue | Global — read |
+| ◇ Purple | Global — address taken |
+| ◇ Cyan | Macro |
+| ◇ Pink | Struct / union |
+
+- Use the **Globals / Macros / Structs** checkboxes in the Legend to show only the kinds you care about
+- Click any diamond to jump straight to that symbol's definition
+- Selecting a **function** node lists every global, macro, and struct it uses in the Selected Node card — each one clickable — even with the ◇ nodes turned off
 
 ---
 
@@ -184,7 +202,7 @@ CodeLens above every global declaration shows:
 
 ### From VSIX
 ```bash
-code --install-extension c-through-2.3.3.vsix
+code --install-extension c-through-2.4.0.vsix
 ```
 
 ---

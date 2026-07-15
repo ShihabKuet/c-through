@@ -13,6 +13,8 @@ class AnalysisDB {
     this._globalRefs  = new Map();   // varName -> [{file, func, funcLine, refType, line}]
     this._funcRefs    = new Map();   // funcName -> [{file, line}] indirect (pointer) refs
     this._funcRefsDirty = true;      // rebuild _funcRefs lazily after files change
+    this._macroIndex  = new Map();   // macroName -> {file, line, isFunctionLike}
+    this._structIndex = new Map();   // struct name/tag -> {file, line, isTypedef}
   }
 
   clear() {
@@ -23,6 +25,8 @@ class AnalysisDB {
     this._globalRefs.clear();
     this._funcRefs.clear();
     this._funcRefsDirty = true;
+    this._macroIndex.clear();
+    this._structIndex.clear();
   }
 
   addFile(parsedFile) {
@@ -45,6 +49,22 @@ class AnalysisDB {
         if (!ex.find(e => e.file === filePath && e.refType === 'extern'))
           ex.push({ file: filePath, func: null, funcLine: null, refType: 'extern', line: g.line });
       }
+    }
+
+    // Index macro definitions (for function -> macro links in the call graph)
+    for (const mac of (parsedFile.macros || [])) {
+      if (!this._macroIndex.has(mac.name)) {
+        this._macroIndex.set(mac.name, {
+          file: filePath, line: mac.line, isFunctionLike: mac.isFunctionLike
+        });
+      }
+    }
+
+    // Index struct/union/enum definitions by both typedef name and tag
+    for (const s of (parsedFile.structs || [])) {
+      const entry = { file: filePath, line: s.line, isTypedef: s.isTypedef };
+      if (s.name && !this._structIndex.has(s.name)) this._structIndex.set(s.name, entry);
+      if (s.tag && !this._structIndex.has(s.tag)) this._structIndex.set(s.tag, entry);
     }
 
     // Index global refs from function bodies
@@ -82,14 +102,37 @@ class AnalysisDB {
     const file = this.files.get(filePath);
     if (!file) return;
 
-    // Remove from function index
+    // Drop this file's caller entries. The predicate depends only on filePath,
+    // so this runs once for the whole file — not once per function.
+    for (const [callee, callers] of this._callersIndex) {
+      if (!callers.some(c => c.file === filePath)) continue; // nothing from this file
+      const filtered = callers.filter(c => c.file !== filePath);
+      if (filtered.length === 0) this._callersIndex.delete(callee);
+      else this._callersIndex.set(callee, filtered);
+    }
+
+    // Remove this file's functions from the index, but only the entries this
+    // file actually owns — otherwise a same-named static in another file (a
+    // common C pattern) would be evicted along with this one.
+    const orphaned = new Set();
     for (const fn of file.functions) {
-      this._functionIndex.delete(fn.name);
-      // Remove callers from this file
-      for (const [callee, callers] of this._callersIndex) {
-        const filtered = callers.filter(c => c.file !== filePath);
-        if (filtered.length === 0) this._callersIndex.delete(callee);
-        else this._callersIndex.set(callee, filtered);
+      const entry = this._functionIndex.get(fn.name);
+      if (entry && entry.file === filePath) {
+        this._functionIndex.delete(fn.name);
+        orphaned.add(fn.name);
+      }
+    }
+    // Any orphaned name still defined by another file takes over the entry.
+    if (orphaned.size) {
+      for (const [otherPath, other] of this.files) {
+        if (!orphaned.size) break;
+        if (otherPath === filePath) continue;
+        for (const ofn of (other.functions || [])) {
+          if (orphaned.has(ofn.name)) {
+            this._functionIndex.set(ofn.name, { file: otherPath, fn: ofn });
+            orphaned.delete(ofn.name);
+          }
+        }
       }
     }
 
@@ -103,6 +146,15 @@ class AnalysisDB {
         else this._globalRefs.set(g.name, filtered);
       }
     }
+
+    // Clean macro / struct index entries from this file
+    for (const [name, e] of this._macroIndex) {
+      if (e.file === filePath) this._macroIndex.delete(name);
+    }
+    for (const [name, e] of this._structIndex) {
+      if (e.file === filePath) this._structIndex.delete(name);
+    }
+
     this.files.delete(filePath);
     this._funcRefsDirty = true;
   }
@@ -164,6 +216,59 @@ class AnalysisDB {
     return this._globalRefs.get(varName) || [];
   }
 
+  getMacroDef(name) {
+    return this._macroIndex.get(name) || null;
+  }
+
+  getStructDef(name) {
+    return this._structIndex.get(name) || null;
+  }
+
+  /**
+   * Build the data symbols (globals, macros, structs) a function touches, for
+   * display as nodes in the call graph. Each is deduped and linked to its
+   * definition. `fn` is a full parser function object (from getFunction).
+   */
+  _functionSymbols(fn) {
+    // Globals — dedupe by name, aggregate the access kinds (read/write/addr)
+    const gmap = new Map();
+    for (const r of (fn.globalRefs || [])) {
+      const acc = gmap.get(r.name) || new Set();
+      acc.add(r.type);
+      gmap.set(r.name, acc);
+    }
+    const globals = [];
+    for (const [name, acc] of gmap) {
+      const def = this.getGlobalDef(name);
+      globals.push({
+        name,
+        access: ['write', 'read', 'addr'].filter(a => acc.has(a)).join('/') || 'ref',
+        file: def ? def.file : null,
+        line: def ? def.line : null
+      });
+    }
+
+    // Macros — intersect the all-caps token set with the real macro table
+    const seenM = new Set();
+    const macros = [];
+    for (const name of (fn.refs || [])) {
+      if (seenM.has(name)) continue;
+      const def = this.getMacroDef(name);
+      if (def) { seenM.add(name); macros.push({ name, file: def.file, line: def.line }); }
+    }
+
+    // Structs — intersect candidate type names with the real struct/union table
+    const seenS = new Set();
+    const structs = [];
+    for (const name of (fn.typeRefs || [])) {
+      if (seenS.has(name)) continue;
+      const def = this.getStructDef(name);
+      if (def) { seenS.add(name); structs.push({ name, file: def.file, line: def.line }); }
+    }
+
+    return { globals, macros, structs };
+  }
+
   getAllGlobals() {
     const result = [];
     for (const [name, def] of this._globalIndex) {
@@ -188,7 +293,11 @@ class AnalysisDB {
         .filter(c => !c.isStdLib)
         .map(c => build(c.name, depth + 1));
       visited.delete(name); // allow same fn in different branches
-      return { name, file: fn.file, line: fn.line, children, params: fn.params, returnType: fn.returnType };
+      return {
+        name, kind: 'function', file: fn.file, line: fn.line, children,
+        params: fn.params, returnType: fn.returnType,
+        symbols: this._functionSymbols(fn)
+      };
     };
     return build(funcName, 0);
   }
@@ -207,7 +316,11 @@ class AnalysisDB {
       const fn = this.getFunction(name);
       const children = callers.map(c => build(c.caller, depth + 1));
       visited.delete(name);
-      return { name, file: fn?.file, line: fn?.line, children, callerCount: callers.length };
+      return {
+        name, kind: 'function', file: fn?.file, line: fn?.line, children,
+        callerCount: callers.length,
+        symbols: fn ? this._functionSymbols(fn) : { globals: [], macros: [], structs: [] }
+      };
     };
     return build(funcName, 0);
   }
